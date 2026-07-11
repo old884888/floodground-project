@@ -1,0 +1,26 @@
+{
+    "grass": (
+        display_name: "草地",
+        symbol: ".",
+        color_fg: "green",
+        color_bg: "dark_green",
+        is_walkable: true,
+        blocks_vision: false,
+    ),
+    "water": (
+        display_name: "水域",
+        symbol: "~",
+        color_fg: "cyan",
+        color_bg: "blue",
+        is_walkable: false,
+        blocks_vision: false,
+    ),
+    "dirt": (
+        display_name: "泥土",
+        symbol: ",",
+        color_fg: "yellow",
+        color_bg: "black",
+        is_walkable: true,
+        blocks_vision: false,
+    ),
+}
