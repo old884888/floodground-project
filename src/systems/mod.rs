@@ -1,4 +1,5 @@
 pub mod ai;
+pub mod building;
 pub mod combat;
 pub mod crafting;
 pub mod dark;
@@ -97,6 +98,7 @@ pub fn run_tick(app: &mut App, rng: &mut impl rand::Rng) {
     weather::update_weather(app, rng);
     needs::update_needs(app);
     crafting::update_crafting(app);
+    building::update_building(app);
     ai::update_ai(app, rng);
     if player_alive {
         combat::update_combat(app, rng);

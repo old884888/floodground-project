@@ -74,6 +74,7 @@ pub fn update_ai(app: &mut App, rng: &mut impl Rng) {
             pos.x = nx;
             pos.y = ny;
         }
+        crate::systems::building::trigger_trap_at(app, nx, ny, entity);
     }
 
     for (entity, act, _name) in actions {

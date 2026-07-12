@@ -33,23 +33,32 @@ pub fn draw(frame: &mut Frame, app: &App, map_area: Rect) {
                             } else {
                                 Style::default().fg(Color::White)
                             };
-                            lines.push(Line::from(Span::styled(
+                            let label = if i == state.cursor && state.take_qty > 1 {
+                                format!(
+                                    "{}{}. {}  ×{}/{}",
+                                    prefix,
+                                    i + 1,
+                                    slot.item.label(),
+                                    state.take_qty,
+                                    slot.count
+                                )
+                            } else {
                                 format!(
                                     "{}{}. {}  ×{}",
                                     prefix,
                                     i + 1,
                                     slot.item.label(),
                                     slot.count
-                                ),
-                                style,
-                            )));
+                                )
+                            };
+                            lines.push(Line::from(Span::styled(label, style)));
                         }
                     }
                 }
             }
             lines.push(Line::from(""));
             lines.push(Line::from(Span::styled(
-                "↑↓选  G/Enter捡  D丢  Esc关",
+                "↑↓选  ←→数量  G/Enter捡  D丢  Esc关",
                 Style::default().fg(Color::DarkGray),
             )));
         }

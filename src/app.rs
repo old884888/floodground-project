@@ -13,7 +13,7 @@ use crate::world::{GameMap, PropKind, CAMP_CX, CAMP_CY};
 #[derive(Debug, Clone)]
 pub enum CraftMenuState {
     /// 正在浏览配方列表
-    Browsing { cursor: usize },
+    Browsing { cursor: usize, scroll: usize },
     /// 制作进行中
     Crafting { spinner_frame: u32 },
 }
@@ -25,6 +25,7 @@ pub enum CraftMenuState {
 pub struct SpatialIndex {
     pub by_tile: HashMap<(i32, i32), Vec<Entity>>,
     pub blockers: HashMap<(i32, i32), bool>,
+    pub vision_blockers: std::collections::HashSet<(i32, i32)>,
 }
 
 pub const DEBUG_ITEMS: &[&str] = &[
@@ -49,9 +50,9 @@ pub const SPAWN_ITEMS: &[&str] = &["狼", "殖民者", "俘虏"];
 pub const TOOL_ITEMS: &[&str] = &["石刀", "削尖棍", "矛", "石斧", "火把"];
 
 pub const SETTLEMENT_SIZE_ITEMS: &[(&str, VillageSize)] = &[
-    ("小村 (3-5间)", VillageSize::Small),
-    ("中村 (5-8间)", VillageSize::Medium),
-    ("大村 (8-12间)", VillageSize::Large),
+    ("小村 (5-8间)", VillageSize::Small),
+    ("中村 (8-12间)", VillageSize::Medium),
+    ("大村 (12-18间)", VillageSize::Large),
 ];
 
 pub const DEBUG_TIME_ITEMS: &[&str] = &["黎明", "白天", "黄昏", "夜晚"];
@@ -230,6 +231,7 @@ impl Weather {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Screen {
     MainMenu,
+    Loading,   // 新游戏加载动画
     Gameplay,
 }
 
@@ -294,6 +296,7 @@ pub struct ExamineState {
     pub y: i32,
     pub menu: ExamineMenu,
     pub cursor: usize,
+    pub take_qty: u32, // 弹窗内捡取的抽取数量，←→调节
 }
 
 #[derive(Debug, Clone)]
@@ -353,9 +356,21 @@ pub struct MainMenuState {
     pub cursor: u8, // 0=开始游戏, 1=退出游戏
 }
 
+#[derive(Debug, Clone)]
+pub enum BuildMenuState {
+    Browsing { cursor: usize, scroll: usize },
+    PickingDir { cursor: usize, scroll: usize },
+    Building { recipe_index: usize }, // 进度从 Building 组件读
+}
+
 pub struct App {
     pub screen: Screen,
     pub menu: MainMenuState,
+    pub build_menu: Option<BuildMenuState>,
+    /// 当前建造中的目标（x, y, 产物类型）；建造完成或中断后清空
+    pub build_target: Option<(i32, i32, crate::systems::building::BuildTarget)>,
+    /// 建造前速度，建完恢复
+    pub pre_build_speed: Option<Speed>,
     pub world: World,
     pub map: GameMap,
     pub spatial: SpatialIndex,
@@ -412,13 +427,16 @@ pub struct App {
     pub weather_mood_tracker: std::collections::HashMap<hecs::Entity, f32>,
     /// 雨滴粒子（持续下落动画）
     pub rain_particles: Vec<RainDrop>,
+    /// 加载界面 tick 计数器
+    pub loading_tick: u8,
 }
 
 /// 一个雨滴粒子：世界坐标 + 子格偏移，渲染时往下落
 #[derive(Debug, Clone, Copy)]
 pub struct RainDrop {
     pub wx: i32,
-    pub wy: f32, // 浮点 y，子格平滑下落
+    pub wy: f32,   // 浮点 y，子格平滑下落
+    pub speed: f32, // 每帧下落速度，随机化避免统一节奏
     pub glyph: char,
 }
 
@@ -603,13 +621,16 @@ impl App {
         let mut app = Self {
             screen: Screen::MainMenu,
             menu: MainMenuState { cursor: 0 },
+            build_menu: None,
+            build_target: None,
+            pre_build_speed: None,
             world,
             map,
             spatial: SpatialIndex::default(),
             camera,
             events: EventQueue::default(),
             log: Vec::new(),
-            tick: 0,
+            tick: 4_000, // 4000/12000 = 33.3% = 早上8点
             day: 1,
             ticks_per_day: 12_000,
             reputation: 0,
@@ -643,6 +664,7 @@ impl App {
             lightning_flash: 0,
             weather_mood_tracker: std::collections::HashMap::new(),
             rain_particles: Vec::new(),
+            loading_tick: 0,
         };
         // 开局随机天气
         let start_weather = Weather::random(rng);
@@ -666,8 +688,6 @@ impl App {
             };
             village::spawn_village(&mut app.world, &mut app.map, &app.spatial, cx, cy, size, rng);
             app.rebuild_spatial_index();
-            let label = size.label().chars().take(2).collect::<String>();
-            app.push_log(format!("远方传来风声——有一座废弃的{}。", label));
         }
 
         app.rebuild_spatial_index();
@@ -765,28 +785,30 @@ impl App {
 
     pub fn period_label(&self) -> &'static str {
         let p = self.day_progress();
-        if p < 0.10 {
-            "黎明"
-        } else if p < 0.60 {
-            "白天"
-        } else if p < 0.70 {
-            "黄昏"
-        } else {
+        if !(0.25..0.80).contains(&p) {
             "夜晚"
+        } else if p < 0.30 {
+            "黎明"
+        } else if p < 0.75 {
+            "白天"
+        } else {
+            "黄昏"
         }
     }
 
     pub fn visibility_radius(&self) -> i32 {
         let base = {
             let progress = self.day_progress();
-            if progress < 0.10 {
-                lerp(8.0, 50.0, progress / 0.10)
-            } else if progress < 0.60 {
-                50.0
-            } else if progress < 0.70 {
-                lerp(50.0, 8.0, (progress - 0.60) / 0.10)
+            if progress < 0.25 {
+                8.0 // 夜晚前半
+            } else if progress < 0.30 {
+                lerp(8.0, 50.0, (progress - 0.25) / 0.05) // 黎明过渡
+            } else if progress < 0.75 {
+                50.0 // 白天
+            } else if progress < 0.80 {
+                lerp(50.0, 8.0, (progress - 0.75) / 0.05) // 黄昏过渡
             } else {
-                8.0
+                8.0 // 夜晚后半
             }
         };
         (base * self.weather.visibility_multiplier()).max(1.0) as i32
@@ -893,13 +915,18 @@ impl App {
             return true;
         }
         if self.map.has_roof(to.0, to.1) {
-            let is_daytime = self.day_progress() >= 0.10 && self.day_progress() < 0.70;
+            let is_daytime = (0.25..0.80).contains(&self.day_progress());
             if is_daytime && self.map.window_light_at(to.0, to.1) > 0 {
                 return true;
             }
             return false;
         }
-        crate::world::within_radius(from, to, self.visibility_radius())
+        // 距离检查
+        if !crate::world::within_radius(from, to, self.visibility_radius()) {
+            return false;
+        }
+        // 视线穿透：from→to 路径上不能有 BlocksVision 实体（墙/门）
+        !self.line_blocked_by_vision(from, to)
     }
 
     pub fn can_see_entity(&self, entity: hecs::Entity) -> bool {
@@ -909,6 +936,32 @@ impl App {
         } else {
             false
         }
+    }
+
+    /// 检查 from→to 直线路径上是否有 BlocksVision 实体阻挡视线
+    fn line_blocked_by_vision(&self, from: (i32, i32), to: (i32, i32)) -> bool {
+        let (x0, y0) = from;
+        let (x1, y1) = to;
+        let dx = (x1 - x0).abs();
+        let dy = -(y1 - y0).abs();
+        let sx = if x0 < x1 { 1 } else { -1 };
+        let sy = if y0 < y1 { 1 } else { -1 };
+        let mut err = dx + dy;
+        let mut x = x0;
+        let mut y = y0;
+        loop {
+            // 跳过起点和终点本身
+            if (x != x0 || y != y0) && (x != x1 || y != y1)
+                && self.spatial.vision_blockers.contains(&(x, y))
+            {
+                return true;
+            }
+            if x == x1 && y == y1 { break; }
+            let e2 = 2 * err;
+            if e2 >= dy { err += dy; x += sx; }
+            if e2 <= dx { err += dx; y += sy; }
+        }
+        false
     }
 
     pub fn entity_label(&self, entity: hecs::Entity) -> String {
@@ -1049,6 +1102,7 @@ impl App {
     pub fn rebuild_spatial_index(&mut self) {
         self.spatial.by_tile.clear();
         self.spatial.blockers.clear();
+        self.spatial.vision_blockers.clear();
         for (e, pos) in self.world.query::<&Position>().iter() {
             self.spatial
                 .by_tile
@@ -1058,6 +1112,9 @@ impl App {
         }
         for (_e, (pos, _)) in self.world.query::<(&Position, &BlocksMovement)>().iter() {
             self.spatial.blockers.insert((pos.x, pos.y), true);
+        }
+        for (_e, (pos, _)) in self.world.query::<(&Position, &BlocksVision)>().iter() {
+            self.spatial.vision_blockers.insert((pos.x, pos.y));
         }
     }
 

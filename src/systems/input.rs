@@ -6,7 +6,7 @@ use crate::app::{
     DEBUG_SUB_TIME, DEBUG_SUB_WEATHER, DEBUG_TIME_ITEMS, DEBUG_WEATHER_ITEMS,
     SIDE_TAB_COUNT, SETTLEMENT_SIZE_ITEMS,
 };
-use crate::components::{Bush, BushState, CraftingState, Hunger, ItemKind, Position, Thirst, Tree};
+use crate::components::{Building, Bush, BushState, CraftingState, Hunger, ItemKind, Position, Thirst, Tree};
 use crate::items::place_item;
 use crate::systems::{crafting, examine, interact};
 
@@ -16,6 +16,13 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
         handle_menu_key(app, key);
         return;
     }
+    // 加载画面：只响应 Q 退出
+    if app.screen == crate::app::Screen::Loading {
+        if key.code == KeyCode::Char('q') || key.code == KeyCode::Char('Q') {
+            app.should_quit = true;
+        }
+        return;
+    }
 
     if app.debug_popup.is_some() {
         handle_debug_popup_key(app, key);
@@ -23,6 +30,10 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
     }
     if app.craft_menu.is_some() {
         handle_craft_menu_key(app, key);
+        return;
+    }
+    if app.build_menu.is_some() {
+        handle_build_menu_key(app, key);
         return;
     }
     if app.focused_tile.is_some() {
@@ -123,8 +134,12 @@ fn handle_action_lock_key(app: &mut App, key: KeyEvent) {
 fn handle_adventure_key(app: &mut App, key: KeyEvent) {
     match key.code {
         KeyCode::Char('r') | KeyCode::Char('R') => {
-            app.craft_menu = Some(CraftMenuState::Browsing { cursor: 0 });
+            app.craft_menu = Some(CraftMenuState::Browsing { cursor: 0, scroll: 0 });
             app.push_log("打开制作菜单。↑↓选择，Enter制作，Esc取消。".into());
+        }
+        KeyCode::Char('b') | KeyCode::Char('B') => {
+            crate::systems::building::open_build_menu(app);
+            app.push_log("打开建造菜单。↑↓选择，Enter确认，Esc取消。".into());
         }
         KeyCode::Char('q') | KeyCode::Char('Q') => app.should_quit = true,
         KeyCode::Char('e') => {
@@ -257,6 +272,7 @@ fn handle_examine_key(app: &mut App, key: KeyEvent) {
                 if len > 0 {
                     if let Some(state) = app.examine.as_mut() {
                         state.cursor = if state.cursor == 0 { len - 1 } else { state.cursor - 1 };
+                        state.take_qty = 1; // 换物品重置数量
                     }
                 }
             }
@@ -265,6 +281,30 @@ fn handle_examine_key(app: &mut App, key: KeyEvent) {
                 if len > 0 {
                     if let Some(state) = app.examine.as_mut() {
                         state.cursor = if state.cursor >= len - 1 { 0 } else { state.cursor + 1 };
+                        state.take_qty = 1; // 换物品重置数量
+                    }
+                }
+            }
+            KeyCode::Left | KeyCode::Char('h') => {
+                if let Some(state) = app.examine.as_mut() {
+                    if state.take_qty > 1 {
+                        state.take_qty -= 1;
+                    }
+                }
+            }
+            KeyCode::Right | KeyCode::Char('l') => {
+                let (px, py, cur, qty) = if let Some(ref s) = app.examine {
+                    (s.x, s.y, s.cursor, s.take_qty)
+                } else {
+                    return;
+                };
+                let max = crate::items::pile_at(app, px, py)
+                    .and_then(|e| app.world.get::<&crate::components::Pile>(e).ok())
+                    .and_then(|p| p.slots.get(cur).map(|s| s.count))
+                    .unwrap_or(0);
+                if let Some(state) = app.examine.as_mut() {
+                    if qty < max {
+                        state.take_qty = qty + 1;
                     }
                 }
             }
@@ -680,7 +720,8 @@ fn handle_menu_key(app: &mut App, key: KeyEvent) {
         }
         KeyCode::Enter => match app.menu.cursor {
             0 => {
-                app.screen = crate::app::Screen::Gameplay;
+                app.screen = crate::app::Screen::Loading;
+                app.loading_tick = 0;
             }
             1 => {
                 app.should_quit = true;
@@ -706,21 +747,100 @@ fn jump_day_progress(app: &mut App, target_progress: f32) {
     app.tick += add;
 }
 
+// ── 建造菜单键盘处理 ──
+
+fn handle_build_menu_key(app: &mut App, key: KeyEvent) {
+    use crate::app::BuildMenuState;
+    use crate::systems::building;
+
+    let state = app.build_menu.clone();
+    match state {
+        Some(BuildMenuState::Building { .. }) if key.code == KeyCode::Esc => {
+            // 建造中：只能 Esc 取消（材料不退）
+            if let Some(actor) = app.actor() {
+                let _ = app.world.remove_one::<Building>(actor);
+            }
+            app.speed = app.pre_build_speed.take().unwrap_or(app.speed);
+            app.build_target = None;
+            building::close_build_menu(app);
+            app.push_log("建造取消了——材料已消耗，半点不剩。".into());
+        }
+        Some(BuildMenuState::Building { .. }) => {}
+        Some(BuildMenuState::PickingDir { cursor: _, .. }) => {
+            let (px, py) = app.actor_pos();
+            match key.code {
+                KeyCode::Up | KeyCode::Char('w') | KeyCode::Char('k') => {
+                    let _ = building::start_build(app, px, py - 1, &mut rand::thread_rng());
+                }
+                KeyCode::Down | KeyCode::Char('s') | KeyCode::Char('j') => {
+                    let _ = building::start_build(app, px, py + 1, &mut rand::thread_rng());
+                }
+                KeyCode::Left | KeyCode::Char('a') | KeyCode::Char('h') => {
+                    let _ = building::start_build(app, px - 1, py, &mut rand::thread_rng());
+                }
+                KeyCode::Right | KeyCode::Char('l') | KeyCode::Char('L') => {
+                    let _ = building::start_build(app, px + 1, py, &mut rand::thread_rng());
+                }
+                KeyCode::Esc => building::close_build_menu(app),
+                _ => {}
+            }
+        }
+        Some(BuildMenuState::Browsing { cursor: _, scroll: _ }) => {
+            let count = building::recipe_count();
+            match key.code {
+                KeyCode::Up | KeyCode::Char('k') => {
+                    if let Some(BuildMenuState::Browsing { cursor, scroll }) = app.build_menu.as_mut() {
+                        *cursor = if *cursor == 0 { count.saturating_sub(1) } else { *cursor - 1 };
+                        if *cursor < *scroll { *scroll = *cursor; }
+                    }
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    if let Some(BuildMenuState::Browsing { cursor, scroll }) = app.build_menu.as_mut() {
+                        *cursor = if *cursor >= count.saturating_sub(1) { 0 } else { *cursor + 1 };
+                        let vis = 5usize; // 可见行数
+                        if *cursor >= *scroll + vis { *scroll = (*cursor).saturating_sub(vis - 1); }
+                    }
+                }
+                KeyCode::Enter => {
+                    let recipe_idx = match &app.build_menu {
+                        Some(BuildMenuState::Browsing { cursor, .. }) => *cursor,
+                        _ => 0,
+                    };
+                    let recipe = &building::BUILD_RECIPES[recipe_idx];
+                    if recipe.self_target {
+                        let (px, py) = app.actor_pos();
+                        let _ = building::start_build(app, px, py, &mut rand::thread_rng());
+                    } else {
+                        app.build_menu = Some(BuildMenuState::PickingDir { cursor: recipe_idx, scroll: 0 });
+                    }
+                }
+                KeyCode::Esc => building::close_build_menu(app),
+                _ => {}
+            }
+        }
+        None => {}
+    }
+}
+
 // ── 制作菜单键盘处理 ──
 
 fn handle_craft_menu_key(app: &mut App, key: KeyEvent) {
     match &app.craft_menu {
-        Some(CraftMenuState::Browsing { cursor }) => {
+        Some(CraftMenuState::Browsing { cursor, scroll }) => {
             let cursor = *cursor;
+            let scroll = *scroll;
             let max = crafting::recipe_count().saturating_sub(1);
             match key.code {
                 KeyCode::Up | KeyCode::Char('k') => {
                     let new_cursor = if cursor == 0 { max } else { cursor - 1 };
-                    app.craft_menu = Some(CraftMenuState::Browsing { cursor: new_cursor });
+                    let new_scroll = if new_cursor < scroll { new_cursor } else { scroll };
+                    app.craft_menu = Some(CraftMenuState::Browsing { cursor: new_cursor, scroll: new_scroll });
                 }
                 KeyCode::Down | KeyCode::Char('j') => {
                     let new_cursor = if cursor >= max { 0 } else { cursor + 1 };
-                    app.craft_menu = Some(CraftMenuState::Browsing { cursor: new_cursor });
+                    let vis = 5usize;
+                    let new_scroll = if new_cursor >= scroll + vis { new_cursor.saturating_sub(vis - 1) } else { scroll };
+                    app.craft_menu = Some(CraftMenuState::Browsing { cursor: new_cursor, scroll: new_scroll });
                 }
                 KeyCode::Enter => {
                     let check = crafting::can_craft(app, cursor);

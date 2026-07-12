@@ -53,10 +53,8 @@ pub fn try_eat(app: &mut App) {
 }
 
 fn item_to_food_key(kind: ItemKind) -> String {
-    match kind {
-        ItemKind::Berry => "berry".into(),
-        _ => "".into(),
-    }
+    // 直接用 item 的 key 去 food.ron 里查；没有就是不能吃
+    kind.key().to_string()
 }
 
 /// 副手吃（占位，以后做选左手还是右手吃）

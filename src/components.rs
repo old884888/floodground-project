@@ -188,19 +188,25 @@ pub enum ItemKind {
 }
 
 impl ItemKind {
-    pub fn label(self) -> &'static str {
+    /// 查表键——对应 items.ron 里的 key
+    pub fn key(self) -> &'static str {
         match self {
-            ItemKind::Wood => "木头",
-            ItemKind::BigStone => "大石头",
-            ItemKind::Stick => "木棍",
-            ItemKind::SmallStone => "小石头",
-            ItemKind::Berry => "莓果",
-            ItemKind::StoneKnife => "石刀",
-            ItemKind::SharpStick => "削尖棍",
-            ItemKind::Spear => "矛",
-            ItemKind::StoneAxe => "石斧",
-            ItemKind::Torch => "火把",
+            ItemKind::Wood => "wood",
+            ItemKind::BigStone => "big_stone",
+            ItemKind::Stick => "stick",
+            ItemKind::SmallStone => "small_stone",
+            ItemKind::Berry => "berry",
+            ItemKind::StoneKnife => "stone_knife",
+            ItemKind::SharpStick => "sharp_stick",
+            ItemKind::Spear => "spear",
+            ItemKind::StoneAxe => "stone_axe",
+            ItemKind::Torch => "torch",
         }
+    }
+
+    pub fn label(self) -> &'static str {
+        // 委托给注册表
+        &crate::data::item_def(self.key()).name
     }
 }
 
@@ -397,6 +403,27 @@ pub struct ContainerTag;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Floor;
+
+#[derive(Debug, Clone, Copy)]
+pub struct DirtRoad;
+
+#[derive(Debug, Clone, Copy)]
+pub struct StoneRoad;
+
+/// 建造进行中：实体正在建造，progress 到 total 即完成
+#[derive(Debug, Clone, Copy)]
+pub struct Building {
+    #[allow(dead_code)]
+    pub recipe_index: usize,
+    pub progress: u32,
+    pub total: u32,
+}
+
+/// 尖刺陷阱：生物踩上触发伤害后消失。builder 记录建造者，用于可见性判断
+#[derive(Debug, Clone, Copy)]
+pub struct StickTrap {
+    pub builder: hecs::Entity,
+}
 
 impl Hunger {
     pub fn clamp(&mut self) {

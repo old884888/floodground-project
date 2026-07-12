@@ -40,6 +40,15 @@ pub fn has_pile(app: &App, x: i32, y: i32) -> bool {
     pile_at(app, x, y).is_some()
 }
 
+/// 该格是否有墙（Wall/Door/Window 都算墙体结构）
+pub fn has_wall_at(app: &App, x: i32, y: i32) -> bool {
+    if let Some(v) = app.spatial.by_tile.get(&(x, y)) {
+        v.iter().any(|&e| app.world.get::<&crate::components::Wall>(e).is_ok())
+    } else {
+        false
+    }
+}
+
 /// 掉落：优先 behind，再 from 附近可走格。失败打日志。
 pub fn drop_item_near(
     app: &mut App,

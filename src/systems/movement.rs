@@ -76,6 +76,9 @@ pub fn apply_pending_move(app: &mut App, rng: &mut impl rand::Rng) {
         pos.y = to.1;
     }
 
+    // ── 陷阱触发 ──
+    crate::systems::building::trigger_trap_at(app, to.0, to.1, actor);
+
     app.mark_spatial_dirty();
 
     app.events.push(GameEvent::CharacterMoved {

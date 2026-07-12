@@ -1,0 +1,12 @@
+{
+    "wood":        ( name: "木头",    glyph: '=',  color: "yellow",   desc: "一块劈好的木料，散发着树脂的味道。它以前是棵树——现在只是块等着被烧的木柴。" ),
+    "big_stone":   ( name: "大石头",  glyph: 'O',  color: "gray",     desc: "一块能砸死人的石头。别问为什么你揣在手里不嫌重——问就是游戏机制。" ),
+    "stick":       ( name: "木棍",    glyph: '/',  color: "yellow",   desc: "一根平平无奇的木棍。拿它打狼跟拿筷子打牛差不多。但聊胜于无。" ),
+    "small_stone": ( name: "小石头",  glyph: 'o',  color: "gray",     desc: "一颗被踢来踢去的小石头。它见证了很多，但什么都没说。" ),
+    "berry":       ( name: "莓果",    glyph: '*',  color: "red",      desc: "一颗红彤彤的莓果，酸甜参半——跟这世界的味道差不多。" ),
+    "stone_knife": ( name: "石刀",    glyph: '!',  color: "white",    desc: "一片锋利的石刀，用两块石头互相敲出来的。人类的第一件工具——就长这样。" ),
+    "sharp_stick": ( name: "削尖棍",  glyph: '/',  color: "red",      desc: "一根削尖的木棍。被石刀刮出锋利的尖，接下来只要火烤就能变矛。" ),
+    "spear":       ( name: "矛",      glyph: '↑',  color: "red",      desc: "火烤硬化过的矛。尖端烧得乌黑发亮，刺进肉里比你的牙好用一万倍。" ),
+    "stone_axe":   ( name: "石斧",    glyph: 'P',  color: "white",    desc: "大石头绑在木棍上——一把旧石器时代的瑞士军刀。砍树效率翻倍，砸人效率也翻倍。" ),
+    "torch":       ( name: "火把",    glyph: 'i',  color: "yellow",   desc: "燃烧的木棍，顶端跳跃着橘色的火焰。移动的篝火，黑夜里的眼睛——虽然烧不了多久。" ),
+}

@@ -20,7 +20,7 @@ pub fn draw(frame: &mut Frame, app: &mut App, area: Rect) {
     let cam_y = app.camera.y;
     let view_w = inner_w.max(0) as usize;
     let view_h = inner_h.max(0) as usize;
-    let nightish = app.day_progress() >= 0.60 || app.day_progress() < 0.10;
+    let nightish = app.day_progress() >= 0.80 || app.day_progress() < 0.25;
 
     let mut entity_map: Vec<Option<(hecs::Entity, u8)>> =
         vec![None; view_w.max(1) * view_h.max(1)];
@@ -80,6 +80,12 @@ pub fn draw(frame: &mut Frame, app: &mut App, area: Rect) {
             app.map.reveal(wx, wy);
 
             if let Some((entity, _)) = entity_map.get(sy * view_w + sx).and_then(|v| *v) {
+                // 陷阱：只有建造者自己能看到
+                if let Ok(trap) = app.world.get::<&crate::components::StickTrap>(entity) {
+                    if Some(trap.builder) != app.actor() {
+                        continue; // 非建造者 → 不渲染，露出地形
+                    }
+                }
                 let (ch, color) = entity_glyph(app, entity);
                 let mut color = dim_color(color, nightish && !lit);
                 color = apply_weather_color(app, color);
@@ -133,28 +139,32 @@ pub fn draw(frame: &mut Frame, app: &mut App, area: Rect) {
         let p_color = parse_color(color_name);
         let mut rng = rand::thread_rng();
 
-        // 粒子下落速度（格/帧），匀速
-        let fall_speed = 0.25;
+        // 粒子下落：每滴速度随机，有的快有的慢，别他妈统一节奏
         let vy_max = (cam_y + view_h as i32) as f32 + 2.0;
         let vx_min = cam_x;
         let vx_max = cam_x + view_w as i32;
 
         // 1. 旧粒子下落
         for p in &mut app.rain_particles {
-            p.wy += fall_speed;
+            p.wy += p.speed;
         }
         // 清理出屏粒子
         app.rain_particles.retain(|p| p.wy < vy_max);
 
-        // 2. 顶部补新粒子（每行按密度补）
+        // 2. 顶部补新粒子（每行按密度补，总数封顶 250 防掉帧）
+        const MAX_RAIN: usize = 250;
         let top = cam_y as f32 - 2.0;
-        for x in vx_min..vx_max {
-            if rng.gen_range(0..density) == 0 {
-                app.rain_particles.push(RainDrop {
-                    wx: x,
-                    wy: top + rng.gen_range(-3.0..0.0), // 错开，不全在同一行落下
-                    glyph: if glyph == '│' && rng.gen_bool(0.3) { '|' } else { glyph },
-                });
+        if app.rain_particles.len() < MAX_RAIN {
+            for x in vx_min..vx_max {
+                if app.rain_particles.len() >= MAX_RAIN { break; }
+                if rng.gen_range(0..density) == 0 {
+                    app.rain_particles.push(RainDrop {
+                        wx: x,
+                        wy: top + rng.gen_range(-3.0..0.0), // 错开，不全在同一行落下
+                        speed: rng.gen_range(0.12..0.55),    // 有快有慢，别他妈跟军训似的齐步走
+                        glyph: if glyph == '│' && rng.gen_bool(0.3) { '|' } else { glyph },
+                    });
+                }
             }
         }
 

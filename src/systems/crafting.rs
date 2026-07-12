@@ -25,6 +25,8 @@ pub struct Recipe {
     pub craft_desc: &'static str,
     /// 是否可以中途打断（Esc 保留半成品）；false = 必须一口气做完
     pub can_interrupt: bool,
+    /// 配方说明（浏览视图展示）
+    pub desc: &'static str,
 }
 
 pub static RECIPES: &[Recipe] = &[
@@ -37,6 +39,7 @@ pub static RECIPES: &[Recipe] = &[
         min_light: 1,
         craft_desc: "正在敲击石片...",
         can_interrupt: true,
+        desc: "两块小石头互相敲出锋利的薄片。人类的第一件工具，文明的起点。",
     },
     Recipe {
         name: "削尖棍",
@@ -47,6 +50,7 @@ pub static RECIPES: &[Recipe] = &[
         min_light: 1,
         craft_desc: "正在用石刀削尖木棍...",
         can_interrupt: true,
+        desc: "用石刀把木棍一端削尖。比徒手掰断强一百倍——虽然还是根棍子。",
     },
     Recipe {
         name: "火烤矛",
@@ -54,9 +58,10 @@ pub static RECIPES: &[Recipe] = &[
         result: (ItemKind::Spear, 1),
         base_progress: 400,
         requires_fire: true,
-        min_light: 0, // 有火就有光
+        min_light: 0,
         craft_desc: "正在火烤硬化矛尖...",
         can_interrupt: true,
+        desc: "削尖棍在火上烤硬，矛尖乌黑发亮。刺进肉里比牙好用一万倍。需要篝火。",
     },
     Recipe {
         name: "石斧",
@@ -71,6 +76,7 @@ pub static RECIPES: &[Recipe] = &[
         min_light: 1,
         craft_desc: "正在打制石斧并装柄...",
         can_interrupt: true,
+        desc: "大石头绑在木棍上——旧石器时代的瑞士军刀。砍树效率翻倍，砸人效率也翻倍。",
     },
     Recipe {
         name: "火把",
@@ -81,6 +87,7 @@ pub static RECIPES: &[Recipe] = &[
         min_light: 0,
         craft_desc: "正在点燃木棍...",
         can_interrupt: true,
+        desc: "木棍蘸上树脂点燃，照亮五格黑夜。烧不了多久——但够你摸黑找到下一根木棍。需要篝火。",
     },
 ];
 
@@ -365,6 +372,12 @@ pub fn start_crafting(app: &mut App, recipe_index: usize) {
     let Some(recipe) = RECIPES.get(recipe_index) else { return };
     let (cx, cy) = app.actor_pos();
 
+    // 自动加速
+    app.pre_build_speed = Some(app.speed);
+    if !matches!(app.speed, crate::app::Speed::Turbo) {
+        app.speed = crate::app::Speed::Fast;
+    }
+
     // 检查是否有半成品可续
     let resume_progress = consume_wip_at(app, cx, cy, recipe_index);
 
@@ -447,6 +460,7 @@ pub fn cancel_crafting(app: &mut App) {
         }
     }
     app.craft_menu = None;
+    app.speed = app.pre_build_speed.take().unwrap_or(app.speed);
 }
 
 /// 完成制作：移除指定实体的 CraftingState，产物进手
@@ -455,6 +469,7 @@ fn finish_crafting(app: &mut App, entity: hecs::Entity, recipe_index: usize) {
     let (result_item, result_count) = recipe.result;
 
     let _ = app.world.remove_one::<CraftingState>(entity);
+    app.speed = app.pre_build_speed.take().unwrap_or(app.speed);
 
     // 产物进手
     let took = try_put_in_hands(app, result_item, result_count);

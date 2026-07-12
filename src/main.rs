@@ -24,7 +24,7 @@ use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 
 use app::App;
-use data::{load_actors, load_food, load_terrain, DataError};
+use data::{init_item_registry, load_actors, load_food, load_terrain, DataError};
 use systems::{run_tick, ticks_this_frame};
 
 fn main() -> io::Result<()> {
@@ -41,6 +41,9 @@ fn main() -> io::Result<()> {
         Ok(f) => f,
         Err(e) => return Err(data_error_to_io(e)),
     };
+    if let Err(e) = init_item_registry("assets/data/items.ron") {
+        return Err(data_error_to_io(e));
+    }
     let mut rng = thread_rng();
     let mut app = match App::new(&terrain, &actors, food_data, &mut rng) {
         Ok(a) => a,
@@ -111,22 +114,19 @@ fn run_loop(
     app: &mut App,
     rng: &mut impl rand::Rng,
 ) -> io::Result<()> {
-    let tick_rate = Duration::from_millis(100);
+    let tick_interval = Duration::from_millis(100);
+    let frame_min = Duration::from_millis(16); // ~60fps 封顶
     let mut last_tick = Instant::now();
 
     loop {
+        let frame_start = Instant::now();
         terminal.draw(|f| ui::draw(f, app))?;
 
-        let timeout = tick_rate
-            .checked_sub(last_tick.elapsed())
-            .unwrap_or(Duration::ZERO);
-
-        if event::poll(timeout)? {
+        // 一口气清空输入队列，别他妈一个一个啃
+        while event::poll(Duration::ZERO)? {
             match event::read()? {
-                Event::Key(key) => {
-                    if key.kind == KeyEventKind::Press {
-                        systems::input::handle_key(app, key);
-                    }
+                Event::Key(key) if key.kind == KeyEventKind::Press => {
+                    systems::input::handle_key(app, key);
                 }
                 Event::Mouse(_) => {}
                 _ => {}
@@ -137,20 +137,33 @@ fn run_loop(
             break;
         }
 
-        // 只在游戏中跑 tick
-        if app.screen == app::Screen::Gameplay {
-            let mut steps = ticks_this_frame(app.speed);
-            if app.force_step {
-                app.force_step = false;
-                steps = steps.max(1);
-            }
-            for _ in 0..steps {
-                run_tick(app, rng);
+        // ── 加载界面：每帧推进 tick ──
+        if app.screen == app::Screen::Loading {
+            app.loading_tick = app.loading_tick.saturating_add(1);
+            // 40 ticks @ ~60fps ≈ 0.67 秒后切到游戏
+            if app.loading_tick >= 40 {
+                app.screen = app::Screen::Gameplay;
             }
         }
 
-        if last_tick.elapsed() >= tick_rate {
-            last_tick = Instant::now();
+        if app.screen == app::Screen::Gameplay {
+            let time_to_tick = last_tick.elapsed() >= tick_interval || app.force_step;
+            if time_to_tick {
+                last_tick = Instant::now();
+                let mut steps = ticks_this_frame(app.speed);
+                if app.force_step {
+                    app.force_step = false;
+                    steps = steps.max(1);
+                }
+                for _ in 0..steps {
+                    run_tick(app, rng);
+                }
+            }
+        }
+
+        let elapsed = frame_start.elapsed();
+        if elapsed < frame_min {
+            std::thread::sleep(frame_min - elapsed);
         }
     }
 

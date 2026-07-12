@@ -29,14 +29,14 @@ pub fn draw(frame: &mut Frame, app: &App, parent_area: Rect) {
     frame.render_widget(Clear, popup_area);
 
     match craft_menu {
-        CraftMenuState::Browsing { cursor } => draw_browsing(frame, app, popup_area, *cursor),
+        CraftMenuState::Browsing { cursor, scroll } => draw_browsing(frame, app, popup_area, *cursor, *scroll),
         CraftMenuState::Crafting { spinner_frame } => {
             draw_crafting(frame, app, popup_area, *spinner_frame)
         }
     }
 }
 
-fn draw_browsing(frame: &mut Frame, app: &App, area: Rect, cursor: usize) {
+fn draw_browsing(frame: &mut Frame, app: &App, area: Rect, cursor: usize, scroll: usize) {
     let (_cx, _cy) = app.actor_pos();
     let light = app.actor_light();
     let has_fire = app.has_fire_adjacent(app.actor_pos().0, app.actor_pos().1);
@@ -47,6 +47,8 @@ fn draw_browsing(frame: &mut Frame, app: &App, area: Rect, cursor: usize) {
     let (ax, ay) = (app.actor_pos().0, app.actor_pos().1);
 
     for (i, recipe) in RECIPES.iter().enumerate() {
+        if i < scroll { continue; }
+        if lines.len() > 12 { break; }
         let check = can_craft(app, i);
         let is_selected = i == cursor;
 
@@ -97,6 +99,13 @@ fn draw_browsing(frame: &mut Frame, app: &App, area: Rect, cursor: usize) {
             Span::styled(line_text, style),
             Span::styled(suffix, Style::default().fg(Color::DarkGray)),
         ]));
+        // 选中项展开描述
+        if is_selected {
+            lines.push(Line::from(Span::styled(
+                format!("    {}", recipe.desc),
+                Style::default().fg(Color::Rgb(180, 180, 160)),
+            )));
+        }
     }
 
     // 分隔线

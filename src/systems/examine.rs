@@ -30,6 +30,7 @@ pub fn open_at(app: &mut App, x: i32, y: i32) {
         y,
         menu,
         cursor: 0,
+        take_qty: 1,
     });
 }
 
@@ -142,6 +143,19 @@ pub fn try_grab_from_pile(app: &mut App) {
     };
 
     let cursor = state.cursor;
+    let qty = state.take_qty.max(1);
+
+    let stack_cnt = app
+        .world
+        .get::<&Pile>(entity)
+        .ok()
+        .and_then(|pile| pile.slots.get(cursor).map(|s| s.count))
+        .unwrap_or(0);
+    let take_n = qty.min(stack_cnt);
+    if take_n == 0 {
+        return;
+    }
+
     let can = app
         .world
         .get::<&Hands>(actor)
@@ -162,7 +176,7 @@ pub fn try_grab_from_pile(app: &mut App) {
         let Ok(mut pile) = app.world.get::<&mut Pile>(entity) else {
             return;
         };
-        pile.take_slot(cursor, 1)
+        pile.take_slot(cursor, take_n)
     };
 
     let Some((item, n)) = taken else {
@@ -183,6 +197,9 @@ pub fn try_grab_from_pile(app: &mut App) {
             if len > 0 {
                 if let Some(ex) = app.examine.as_mut() {
                     ex.cursor = ex.cursor.min(len - 1);
+                    // 剩余栈可能比 take_qty 小，缩一下
+                    let remaining = pile.slots.get(ex.cursor).map(|s| s.count).unwrap_or(0);
+                    ex.take_qty = ex.take_qty.min(remaining).max(1);
                 }
             }
             pile.is_empty()
@@ -284,4 +301,5 @@ fn toggle_door(app: &mut App, x: i32, y: i32) {
         if let Ok(mut door) = app.world.get::<&mut Door>(e) { door.open = true; }
         app.push_log("门打开了。".into());
     }
+    app.rebuild_spatial_index();
 }

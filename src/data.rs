@@ -1,4 +1,6 @@
+use std::collections::HashMap;
 use std::io;
+use std::sync::OnceLock;
 use thiserror::Error;
 
 use serde::Deserialize;
@@ -83,6 +85,54 @@ pub fn load_actors(path: &str) -> Result<ActorsConfig, DataError> {
         });
     }
     Ok(cfg)
+}
+
+// ── 物品注册表（数据驱动，替代 14 个文件里散落的 match 臂）──
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ItemDef {
+    pub name: String,
+    pub glyph: char,
+    pub color: String,
+    pub desc: String,
+}
+
+pub type ItemDefMap = HashMap<String, ItemDef>;
+
+static ITEM_REGISTRY: OnceLock<ItemDefMap> = OnceLock::new();
+
+pub fn init_item_registry(path: &str) -> Result<(), DataError> {
+    let map = load_items(path)?;
+    ITEM_REGISTRY.set(map).map_err(|_| DataError::Validation {
+        path: path.into(),
+        message: "ITEM_REGISTRY 已初始化过".into(),
+    })
+}
+
+pub fn item_def(key: &str) -> &ItemDef {
+    ITEM_REGISTRY
+        .get()
+        .and_then(|m| m.get(key))
+        .unwrap_or_else(|| {
+            static FALLBACK: OnceLock<ItemDef> = OnceLock::new();
+            FALLBACK.get_or_init(|| ItemDef {
+                name: "???".into(),
+                glyph: '?',
+                color: "white".into(),
+                desc: "一件你完全认不出来的东西。".into(),
+            })
+        })
+}
+
+fn load_items(path: &str) -> Result<ItemDefMap, DataError> {
+    let text = std::fs::read_to_string(path).map_err(|e| DataError::Io {
+        path: path.into(),
+        source: e,
+    })?;
+    ron::from_str(&text).map_err(|e| DataError::Parse {
+        path: path.into(),
+        message: e.to_string(),
+    })
 }
 
 pub fn load_food(path: &str) -> Result<FoodMap, DataError> {

@@ -21,12 +21,18 @@ pub fn try_grab(app: &mut App, rng: &mut impl rand::Rng) {
         return;
     }
 
-    // 邻格结果灌木仍可直接采
+    // 脚下没有 → 看面前那格
+    let (fx, fy) = (px + app.facing.0, py + app.facing.1);
+    if has_pile(app, fx, fy) {
+        crate::systems::examine::open_at(app, fx, fy);
+        return;
+    }
+
+    // 都没有 → 面前灌木可采
     if crate::systems::harvest::try_harvest_bush(app, rng) {
         return;
     }
 
-    let _ = ();
     app.push_log("这里没什么可拿的。".into());
 }
 

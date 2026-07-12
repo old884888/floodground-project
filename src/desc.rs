@@ -201,6 +201,15 @@ fn describe_entity(app: &App, e: Entity) -> Option<String> {
         EntityKind::Floor => {
             "踩上去会嘎吱响的木地板，年久失修——但至少不用踩泥巴了。".into()
         }
+        EntityKind::DirtRoad => {
+            "一条踩实的泥土路，雨水冲出了细小的沟壑。前人走过的路，总比草丛里瞎撞强。".into()
+        }
+        EntityKind::StoneRoad => {
+            "石板铺就的路面，缝隙里长着倔强的青苔。能铺这种路的人，肯定不简单——或者曾经不简单。".into()
+        }
+        EntityKind::StickTrap => {
+            "削尖的木棍埋在浅坑里，尖端朝上。踩上去能把脚掌刺个对穿——甭管是狼还是你自己。".into()
+        }
         EntityKind::Campfire => {
             "一团不屈的火焰，是这该死的世界里唯一温暖的谎言。烧的是木柴，暖的是希望——虽然两者都不持久。".into()
         }
@@ -241,16 +250,5 @@ fn describe_entity(app: &App, e: Entity) -> Option<String> {
 }
 
 fn describe_item(item: ItemKind) -> String {
-    match item {
-        ItemKind::Wood => "一块劈好的木料，散发着树脂的味道。它以前是棵树——现在只是块等着被烧的木柴。".into(),
-        ItemKind::BigStone => "一块能砸死人的石头。别问为什么你揣在手里不嫌重——问就是游戏机制。".into(),
-        ItemKind::Stick => "一根平平无奇的木棍。拿它打狼跟拿筷子打牛差不多。但聊胜于无。".into(),
-        ItemKind::SmallStone => "一颗被踢来踢去的小石头。它见证了很多，但什么都没说。".into(),
-        ItemKind::Berry => "一颗红彤彤的莓果，酸甜参半——跟这世界的味道差不多。".into(),
-        ItemKind::StoneKnife => "一片锋利的石刀，用两块石头互相敲出来的。人类的第一件工具——就长这样。".into(),
-        ItemKind::SharpStick => "一根削尖的木棍。被石刀刮出锋利的尖，接下来只要火烤就能变矛。".into(),
-        ItemKind::Spear => "火烤硬化过的矛。尖端烧得乌黑发亮，刺进肉里比你的牙好用一万倍。".into(),
-        ItemKind::StoneAxe => "大石头绑在木棍上——一把旧石器时代的瑞士军刀。砍树效率翻倍，砸人效率也翻倍。".into(),
-        ItemKind::Torch => "燃烧的木棍，顶端跳跃着橘色的火焰。移动的篝火，黑夜里的眼睛——虽然烧不了多久。".into(),
-    }
+    crate::data::item_def(item.key()).desc.clone()
 }

@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use hecs::World;
+use hecs::{Entity, World};
 use rand::Rng;
 
 use crate::app::SpatialIndex;
@@ -109,6 +109,50 @@ fn all_templates() -> Vec<BuildingTemplate> {
             ],
             roofed: true,
         },
+        BuildingTemplate {
+            name: "长屋",
+            palette: palette(),
+            layouts: &[
+                &["###W#####",
+                  "#...B...W",
+                  "#...T...#",
+                  "#.......#",
+                  "#...B...#",
+                  "#...T...#",
+                  "###+#####"],
+                &["#W#######",
+                  "#..B....W",
+                  "#..T....#",
+                  "#.......#",
+                  "#..B....W",
+                  "#..T....#",
+                  "#####+###"],
+            ],
+            roofed: true,
+        },
+        BuildingTemplate {
+            name: "大厅",
+            palette: palette(),
+            layouts: &[
+                &["####W#####",
+                  "#........#",
+                  "#..B.T..#W",
+                  "#........#",
+                  "#..B.T...#",
+                  "#........#",
+                  "#....C..#W",
+                  "####+#####"],
+                &["###W######",
+                  "#........#",
+                  "#..B.T...W",
+                  "#........#",
+                  "#..B.T...W",
+                  "#........#",
+                  "#...C....W",
+                  "######+###"],
+            ],
+            roofed: true,
+        },
     ]
 }
 
@@ -179,25 +223,25 @@ pub enum VillageSize {
 impl VillageSize {
     pub fn label(self) -> &'static str {
         match self {
-            VillageSize::Small => "小村 (3-5)",
-            VillageSize::Medium => "中村 (5-8)",
-            VillageSize::Large => "大村 (8-12)",
+            VillageSize::Small => "小村 (5-8)",
+            VillageSize::Medium => "中村 (8-12)",
+            VillageSize::Large => "大村 (12-18)",
         }
     }
 
     fn building_count(self) -> (usize, usize) {
         match self {
-            VillageSize::Small => (3, 5),
-            VillageSize::Medium => (5, 8),
-            VillageSize::Large => (8, 12),
+            VillageSize::Small => (5, 8),
+            VillageSize::Medium => (8, 12),
+            VillageSize::Large => (12, 18),
         }
     }
 
     fn template_weights(self) -> Vec<(&'static str, f64)> {
         match self {
-            VillageSize::Small => vec![("小屋", 0.65), ("中屋", 0.35)],
-            VillageSize::Medium => vec![("小屋", 0.40), ("中屋", 0.35), ("工坊", 0.15), ("仓库", 0.10)],
-            VillageSize::Large => vec![("小屋", 0.30), ("中屋", 0.30), ("大屋", 0.15), ("工坊", 0.10), ("仓库", 0.15)],
+            VillageSize::Small => vec![("小屋", 0.35), ("中屋", 0.30), ("大屋", 0.15), ("长屋", 0.10), ("工坊", 0.05), ("仓库", 0.05)],
+            VillageSize::Medium => vec![("小屋", 0.20), ("中屋", 0.25), ("大屋", 0.20), ("长屋", 0.15), ("工坊", 0.10), ("仓库", 0.10)],
+            VillageSize::Large => vec![("小屋", 0.05), ("中屋", 0.15), ("大屋", 0.15), ("长屋", 0.25), ("大厅", 0.15), ("工坊", 0.15), ("仓库", 0.10)],
         }
     }
 }
@@ -205,7 +249,7 @@ impl VillageSize {
 pub fn spawn_village(
     world: &mut World,
     map: &mut GameMap,
-    spatial: &SpatialIndex,
+    _spatial: &SpatialIndex,
     origin_x: i32,
     origin_y: i32,
     size: VillageSize,
@@ -216,29 +260,65 @@ pub fn spawn_village(
     let templates = all_templates();
     let weights = size.template_weights();
     let mut placed: Vec<(i32, i32, i32, i32)> = Vec::new();
-    let mut occupied: HashSet<(i32, i32)> = spatial.by_tile.keys().copied().collect();
-
-    let layout_style = match size {
-        VillageSize::Small => "circle",
-        VillageSize::Medium | VillageSize::Large => "street",
+    // 只记录建筑结构占位（墙/门/窗/屋顶），不把树石灌木算进去——房子可以清场
+    let mut occupied: HashSet<(i32, i32)> = {
+        let mut set = HashSet::new();
+        for (e, pos) in world.query::<&Position>().with::<&Wall>().iter() {
+            set.insert((pos.x, pos.y));
+            let _ = e;
+        }
+        for (_e, (pos, _)) in world.query::<(&Position, &Door)>().iter() {
+            set.insert((pos.x, pos.y));
+        }
+        for (_e, (pos, _)) in world.query::<(&Position, &Window)>().iter() {
+            set.insert((pos.x, pos.y));
+        }
+        set
     };
 
+    let (layout_style, radius) = match size {
+        VillageSize::Small => ("circle", (4.0, 14.0)),
+        VillageSize::Medium => ("mixed", (6.0, 18.0)),
+        VillageSize::Large => ("mixed", (8.0, 20.0)),
+    };
+
+    // 村中心篝火——所有路汇集到这里
+    if map.in_bounds(origin_x, origin_y) && map.is_walkable(origin_x, origin_y) {
+        world.spawn((
+            Position { x: origin_x, y: origin_y },
+            Campfire,
+            LightSource { radius: 10, brightness: 2 },
+            BlocksMovement,
+        ));
+        occupied.insert((origin_x, origin_y));
+    }
+
+    let mut door_positions: Vec<(i32, i32)> = Vec::new();
+
     for _ in 0..count {
-        for _attempt in 0..50 {
+        for _attempt in 0..100 {
             let (bx, by) = match layout_style {
                 "circle" => {
                     let angle = rng.gen_range(0.0..std::f32::consts::TAU);
-                    let dist = rng.gen_range(3.0..12.0);
+                    let dist = rng.gen_range(radius.0..radius.1);
                     (origin_x + (angle.cos() * dist) as i32,
                      origin_y + (angle.sin() * dist) as i32)
                 }
                 _ => {
-                    let side = rng.gen_range(-12..=12);
-                    let along = rng.gen_range(-15..=15);
-                    if rng.gen_bool(0.5) {
-                        (origin_x + along, origin_y + side)
+                    // mixed: 60% 环状，40% 沿街
+                    if rng.gen_bool(0.6) {
+                        let angle = rng.gen_range(0.0..std::f32::consts::TAU);
+                        let dist = rng.gen_range(radius.0..radius.1);
+                        (origin_x + (angle.cos() * dist) as i32,
+                         origin_y + (angle.sin() * dist) as i32)
                     } else {
-                        (origin_x + side, origin_y + along)
+                        let side = rng.gen_range(-16..=16);
+                        let along = rng.gen_range(-20..=20);
+                        if rng.gen_bool(0.5) {
+                            (origin_x + along, origin_y + side)
+                        } else {
+                            (origin_x + side, origin_y + along)
+                        }
                     }
                 }
             };
@@ -255,7 +335,7 @@ pub fn spawn_village(
 
             if !can_place_building_v2(map, &occupied, bx, by, &rotated) { continue; }
 
-            place_building(world, map, tpl, bx, by, &rotated, rng);
+            let door = place_building(world, map, tpl, bx, by, &rotated, rng);
             for (ly, row) in rotated.iter().enumerate() {
                 for (lx, ch) in row.char_indices() {
                     if ch != ' ' {
@@ -264,13 +344,33 @@ pub fn spawn_village(
                 }
             }
             placed.push((bx, by, w, h));
+            if let Some(dp) = door {
+                door_positions.push(dp);
+            }
             break;
         }
     }
 
-    if matches!(size, VillageSize::Large) {
-        place_fence_around_v2(world, map, &occupied, origin_x, origin_y, rng);
+    // ── 泥土路：从每扇门连到村中心 ──
+    let road_kind: RoadKind = match size {
+        VillageSize::Small | VillageSize::Medium => RoadKind::Dirt,
+        VillageSize::Large => RoadKind::Stone,
+    };
+    for (dx, dy) in &door_positions {
+        draw_road(world, map, &occupied, *dx, *dy, origin_x, origin_y, road_kind);
     }
+
+    // ── 围墙：以最远房子 +3 为半径，确保全包 ──
+    let mut max_dist = if matches!(size, VillageSize::Large) { 12i32 } else { 0 };
+    for &(bx, by, w, h) in &placed {
+        let corners = [(bx, by), (bx + w, by), (bx, by + h), (bx + w, by + h)];
+        for (ex, ey) in &corners {
+            let d = (ex - origin_x).abs().max((ey - origin_y).abs());
+            max_dist = max_dist.max(d);
+        }
+    }
+    let fence_radius = (max_dist + 3).max(8);
+    place_fence_around_v2(world, map, &occupied, origin_x, origin_y, fence_radius, rng);
 }
 
 fn pick_template<'a>(templates: &'a [BuildingTemplate], weights: &[(&str, f64)], rng: &mut impl Rng) -> &'a BuildingTemplate {
@@ -333,6 +433,30 @@ fn can_place_building_v2(map: &GameMap, occupied: &HashSet<(i32, i32)>, bx: i32,
     true
 }
 
+/// 铲掉 (x,y) 上的树、岩石、灌木——清场给建筑/路让位
+fn clear_tile(world: &mut World, x: i32, y: i32) {
+    let to_kill: Vec<Entity> = world
+        .query::<&Position>()
+        .with::<&Tree>()
+        .iter()
+        .filter(|(_, p)| p.x == x && p.y == y)
+        .map(|(e, _)| e)
+        .chain(
+            world.query::<&Position>().with::<&Boulder>().iter()
+                .filter(|(_, p)| p.x == x && p.y == y)
+                .map(|(e, _)| e),
+        )
+        .chain(
+            world.query::<&Position>().with::<&Bush>().iter()
+                .filter(|(_, p)| p.x == x && p.y == y)
+                .map(|(e, _)| e),
+        )
+        .collect();
+    for e in to_kill {
+        let _ = world.despawn(e);
+    }
+}
+
 fn place_building(
     world: &mut World,
     map: &mut GameMap,
@@ -341,8 +465,18 @@ fn place_building(
     by: i32,
     layout: &[String],
     rng: &mut impl Rng,
-) {
+) -> Option<(i32, i32)> {
     let mut windows: Vec<(i32, i32)> = Vec::new();
+    let mut door_pos: Option<(i32, i32)> = None;
+    let w = layout[0].len() as i32;
+    let h = layout.len() as i32;
+
+    // 先清场：房子脚下如果有树/石/灌木，直接铲掉
+    for (ly, row) in layout.iter().enumerate() {
+        for (lx, _) in row.char_indices() {
+            clear_tile(world, bx + lx as i32, by + ly as i32);
+        }
+    }
 
     for (ly, row) in layout.iter().enumerate() {
         for (lx, ch) in row.char_indices() {
@@ -366,6 +500,7 @@ fn place_building(
                         harvest_for("WoodDoor"),
                     ));
                     map.set_roof(wx, wy, tpl.roofed);
+                    door_pos = Some((wx, wy));
                 }
                 "Window" => {
                     world.spawn((
@@ -460,6 +595,16 @@ fn place_building(
     for &(wx, wy) in &windows {
         propagate_window_light(map, wx, wy);
     }
+
+    // 室内光源——油灯挂屋子正中间，半径覆盖大部分房间，避免全黑
+    let center_x = bx + w / 2;
+    let center_y = by + h / 2;
+    world.spawn((
+        Position { x: center_x, y: center_y },
+        LightSource { radius: 5, brightness: 1 },
+    ));
+
+    door_pos
 }
 
 fn spawn_wall(world: &mut World, x: i32, y: i32, is_stone: bool) {
@@ -509,11 +654,11 @@ fn harvest_for(name: &str) -> Harvestable {
 }
 
 fn propagate_window_light(map: &mut GameMap, wx: i32, wy: i32) {
-    for dy in -3i32..=3 {
-        for dx in -3i32..=3 {
+    for dy in -5i32..=5 {
+        for dx in -5i32..=5 {
             let dist = dx.abs().max(dy.abs());
-            if dist == 0 || dist > 3 { continue; }
-            let strength = 4u8.saturating_sub(dist as u8);
+            if dist == 0 || dist > 5 { continue; }
+            let strength = 6u8.saturating_sub(dist as u8);
             let tx = wx + dx;
             let ty = wy + dy;
             if map.in_bounds(tx, ty) && map.has_roof(tx, ty) {
@@ -523,8 +668,56 @@ fn propagate_window_light(map: &mut GameMap, wx: i32, wy: i32) {
     }
 }
 
-fn place_fence_around_v2(world: &mut World, map: &mut GameMap, occupied: &HashSet<(i32, i32)>, cx: i32, cy: i32, rng: &mut impl Rng) {
-    let radius = rng.gen_range(12i32..=18);
+#[derive(Debug, Clone, Copy)]
+enum RoadKind {
+    Dirt,
+    Stone,
+}
+
+/// 简单 Chebyshev 路径：从门走到中心，每步铺路
+#[allow(clippy::too_many_arguments)]
+fn draw_road(
+    world: &mut World,
+    map: &mut GameMap,
+    occupied: &HashSet<(i32, i32)>,
+    mut x: i32,
+    mut y: i32,
+    cx: i32,
+    cy: i32,
+    kind: RoadKind,
+) {
+    let mut steps = 0;
+    let max_steps = 60;
+    while (x != cx || y != cy) && steps < max_steps {
+        steps += 1;
+        let dx = (cx - x).signum();
+        let dy = (cy - y).signum();
+        // Chebyshev：优先走差距大的方向，对角线也可以
+        if (cx - x).abs() > (cy - y).abs() {
+            x += dx;
+        } else if (cy - y).abs() > (cx - x).abs() {
+            y += dy;
+        } else {
+            x += dx;
+            y += dy;
+        }
+        if !map.in_bounds(x, y) { break; }
+        if occupied.contains(&(x, y)) { break; } // 碰到建筑就停
+        if !map.is_walkable(x, y) { break; }
+        // 清掉路上的树石灌木，不然路会被盖在下面看不见
+        clear_tile(world, x, y);
+        match kind {
+            RoadKind::Dirt => {
+                world.spawn((Position { x, y }, DirtRoad));
+            }
+            RoadKind::Stone => {
+                world.spawn((Position { x, y }, StoneRoad));
+            }
+        }
+    }
+}
+
+fn place_fence_around_v2(world: &mut World, map: &mut GameMap, occupied: &HashSet<(i32, i32)>, cx: i32, cy: i32, radius: i32, rng: &mut impl Rng) {
     for dy in -radius..=radius {
         for dx in -radius..=radius {
             if dx.abs().max(dy.abs()) != radius { continue; }

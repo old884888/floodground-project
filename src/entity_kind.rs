@@ -26,12 +26,15 @@ pub enum EntityKind {
     Bed,
     Container,
     Floor,
+    DirtRoad,
+    StoneRoad,
     Campfire,
     Tree,
     Boulder,
     Bush(BushState),
     Pile(Option<ItemKind>),       // 主导物品
     CraftWip(usize, u32),         // 半成品（recipe_index, progress）
+    StickTrap,                    // 尖刺陷阱
     Named(String),                // 兜底
 }
 
@@ -88,6 +91,15 @@ impl EntityKind {
         if let Ok(wip) = app.world.get::<&CraftWip>(e) {
             return EntityKind::CraftWip(wip.recipe_index, wip.progress);
         }
+        if app.world.get::<&StickTrap>(e).is_ok() {
+            return EntityKind::StickTrap;
+        }
+        if app.world.get::<&DirtRoad>(e).is_ok() {
+            return EntityKind::DirtRoad;
+        }
+        if app.world.get::<&StoneRoad>(e).is_ok() {
+            return EntityKind::StoneRoad;
+        }
         if app.world.get::<&Floor>(e).is_ok() {
             return EntityKind::Floor;
         }
@@ -113,6 +125,8 @@ impl EntityKind {
             EntityKind::Pile(_) => 15,
             EntityKind::CraftWip(_, _) => 14,
             EntityKind::Floor => 5,
+            EntityKind::StickTrap => 20,
+            EntityKind::DirtRoad | EntityKind::StoneRoad => 4,
             EntityKind::Named(_) => 1,
         }
     }
@@ -143,6 +157,9 @@ impl EntityKind {
                 BushState::None => ('"', Color::DarkGray),
             },
             EntityKind::Floor => ('.', Color::Rgb(60, 40, 20)),
+            EntityKind::DirtRoad => ('·', Color::Rgb(130, 100, 50)),
+            EntityKind::StoneRoad => ('·', Color::Rgb(150, 150, 150)),
+            EntityKind::StickTrap => ('↓', Color::Rgb(180, 40, 40)),
             EntityKind::Pile(Some(item)) => crate::ui::item_glyph(*item),
             EntityKind::Pile(None) => ('.', Color::DarkGray),
             EntityKind::CraftWip(_, _) => ('…', Color::Yellow),

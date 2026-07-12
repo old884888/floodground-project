@@ -196,6 +196,8 @@ fn try_move(app: &mut App, entity: hecs::Entity, ex: i32, ey: i32, dirs: &[(i32,
             pos.x = nx;
             pos.y = ny;
         }
+        // 陷阱触发
+        crate::systems::building::trigger_trap_at(app, nx, ny, entity);
         app.mark_spatial_dirty();
         return true;
     }

@@ -9,7 +9,7 @@ mod side_panel;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Paragraph};
+use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 use ratatui::Frame;
 
 use crate::app::{App, Screen};
@@ -19,6 +19,11 @@ use crate::entity_kind::EntityKind;
 pub fn draw(frame: &mut Frame, app: &mut App) {
     if app.screen == Screen::MainMenu {
         menu::draw(frame, app);
+        return;
+    }
+
+    if app.screen == Screen::Loading {
+        draw_loading(frame, app);
         return;
     }
 
@@ -40,6 +45,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         .split(root[1]);
 
     map_view::draw(frame, app, mid[0]);
+    draw_build_popup(frame, app, frame.area());
     side_panel::draw(frame, app, mid[1]);
     inspect_popup::draw(frame, app, mid[0]);
     craft_menu::draw(frame, app, frame.area());
@@ -134,19 +140,184 @@ pub fn entity_draw_priority(app: &App, entity: hecs::Entity) -> u8 {
 }
 
 pub fn item_glyph(item: crate::components::ItemKind) -> (char, Color) {
-    use crate::components::ItemKind;
-    match item {
-        ItemKind::Wood => ('=', Color::Yellow),
-        ItemKind::BigStone => ('O', Color::Gray),
-        ItemKind::Stick => ('/', Color::Yellow),
-        ItemKind::SmallStone => ('o', Color::Gray),
-        ItemKind::Berry => ('*', Color::Red),
-        ItemKind::StoneKnife => ('!', Color::White),
-        ItemKind::SharpStick => ('/', Color::Red),
-        ItemKind::Spear => ('↑', Color::Red),
-        ItemKind::StoneAxe => ('P', Color::White),
-        ItemKind::Torch => ('i', Color::Yellow),
+    let def = crate::data::item_def(item.key());
+    let color = match def.color.as_str() {
+        "yellow" => Color::Yellow,
+        "gray" | "grey" => Color::Gray,
+        "red" => Color::Red,
+        "white" => Color::White,
+        "green" => Color::Green,
+        "blue" => Color::Blue,
+        "cyan" => Color::Cyan,
+        "magenta" => Color::Magenta,
+        _ => Color::White,
+    };
+    (def.glyph, color)
+}
+
+fn draw_build_popup(frame: &mut Frame, app: &App, area: Rect) {
+    use crate::app::BuildMenuState;
+    let Some(ref menu) = app.build_menu else { return };
+
+    let mut lines: Vec<Line> = Vec::new();
+
+    match menu {
+        BuildMenuState::Building { recipe_index } => {
+            let recipe = &crate::systems::building::BUILD_RECIPES[*recipe_index];
+            // 读进度
+            let (prog, total) = app.actor()
+                .and_then(|a| app.world.get::<&crate::components::Building>(a).ok())
+                .map(|b| (b.progress, b.total))
+                .unwrap_or((0, 1));
+            let pct = if total > 0 { (prog as f32 / total as f32 * 100.0) as u32 } else { 0 };
+
+            // 旋转动画
+            const SPINNER: &[char] = &['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+            let spinner = SPINNER[(prog as usize / 2) % SPINNER.len()];
+
+            // 进度条
+            let bar_w = 20usize;
+            let filled = (pct as usize * bar_w / 100).min(bar_w);
+            let bar = format!("[{}{}]", "█".repeat(filled), "░".repeat(bar_w - filled));
+
+            lines.push(Line::from(Span::styled(
+                format!("{} {}", spinner, recipe.name),
+                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+            )));
+            lines.push(Line::from(""));
+            lines.push(Line::from(Span::styled(
+                recipe.build_desc,
+                Style::default().fg(Color::White),
+            )));
+            lines.push(Line::from(""));
+            lines.push(Line::from(Span::styled(bar, Style::default().fg(Color::Green))));
+            lines.push(Line::from(""));
+            lines.push(Line::from(Span::styled(
+                format!("  {}%", pct),
+                Style::default().fg(Color::DarkGray),
+            )));
+            lines.push(Line::from(""));
+            lines.push(Line::from(Span::styled(
+                "Esc 取消（材料不退）",
+                Style::default().fg(Color::DarkGray),
+            )));
+        }
+        BuildMenuState::Browsing { cursor, scroll } | BuildMenuState::PickingDir { cursor, scroll } => {
+            let recipes = crate::systems::building::BUILD_RECIPES;
+            let scroll = *scroll;
+            let cursor = *cursor;
+            lines.push(Line::from(Span::styled(
+                "—— 建造菜单 ——",
+                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+            )));
+            lines.push(Line::from(""));
+            for (i, r) in recipes.iter().enumerate() {
+                if i < scroll { continue; }
+                if lines.len() > 14 { break; } // 留空间给帮助行
+                let affordable = crate::systems::building::can_afford(app, i);
+                let prefix = if i == cursor { "▶ " } else { "  " };
+                let sty = if !affordable {
+                    Style::default().fg(Color::DarkGray)
+                } else if i == cursor {
+                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default().fg(Color::White)
+                };
+                let mat: Vec<String> = r.ingredients.iter()
+                    .map(|(item, n)| format!("{}×{}", item.label(), n))
+                    .collect();
+                lines.push(Line::from(Span::styled(
+                    format!("{}{}  ({})", prefix, r.name, mat.join(" + ")),
+                    sty,
+                )));
+                // 描述行——选中项展开，未选中缩进灰色
+                if i == cursor {
+                    lines.push(Line::from(Span::styled(
+                        format!("    {}", r.desc),
+                        Style::default().fg(Color::Rgb(180, 180, 160)),
+                    )));
+                }
+            }
+            lines.push(Line::from(""));
+            let hint = if matches!(menu, BuildMenuState::PickingDir { .. }) {
+                "方向键选位置  Esc取消"
+            } else {
+                "↑↓选  Enter确认  Esc关"
+            };
+            lines.push(Line::from(Span::styled(hint, Style::default().fg(Color::DarkGray))));
+        }
     }
+
+    let h = (lines.len() as u16 + 2).min(18);
+    let w = 38u16;
+    let x = area.x + (area.width.saturating_sub(w)) / 2;
+    let y = area.y + 2;
+    let popup = Rect { x, y, width: w, height: h };
+    frame.render_widget(Clear, popup);
+    let widget = Paragraph::new(lines).block(
+        Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Yellow)),
+    );
+    frame.render_widget(widget, popup);
+}
+
+fn draw_loading(frame: &mut Frame, app: &App) {
+    let area = frame.area();
+    let t = app.loading_tick as f32 / 40.0; // 0.0..1.0
+
+    let (stage_name, _pct) = if t < 0.20 {
+        ("校验模板...", t / 0.20)
+    } else if t < 0.45 {
+        ("生成地形...", (t - 0.20) / 0.25)
+    } else if t < 0.65 {
+        ("散布植被...", (t - 0.45) / 0.20)
+    } else if t < 0.85 {
+        ("建立村庄...", (t - 0.65) / 0.20)
+    } else {
+        ("释放狼群...", (t - 0.85) / 0.15)
+    };
+
+    let bar_w = 30usize;
+    let filled = (t * bar_w as f32) as usize;
+    let bar = format!(
+        "[{}{}]",
+        "█".repeat(filled),
+        "░".repeat(bar_w.saturating_sub(filled))
+    );
+
+    let mut lines: Vec<Line> = Vec::new();
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        "  血壤 · Bloodsoil",
+        Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+    )));
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        stage_name,
+        Style::default().fg(Color::Yellow),
+    )));
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        bar,
+        Style::default().fg(Color::Green),
+    )));
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        format!("  {:.0}%", t * 100.0),
+        Style::default().fg(Color::DarkGray),
+    )));
+
+    let h = lines.len() as u16 + 2;
+    let w = 40u16;
+    let x = area.x + (area.width.saturating_sub(w)) / 2;
+    let y = area.y + (area.height.saturating_sub(h)) / 2;
+    let popup = Rect { x, y, width: w, height: h };
+
+    let widget = Paragraph::new(lines).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Yellow)),
+    );
+    frame.render_widget(widget, popup);
 }
 
 #[allow(dead_code)]
