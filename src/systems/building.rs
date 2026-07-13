@@ -276,6 +276,11 @@ pub fn can_build(app: &App, recipe_index: usize, target_x: i32, target_y: i32) -
         if !can_build_roof(app, cx, cy) {
             return BuildCheck::NoSupport;
         }
+        // 浅水不可建屋顶
+        let terrain = app.map.terrain(cx, cy);
+        if terrain == TerrainKind::ShallowWater || terrain == TerrainKind::Water {
+            return BuildCheck::NoBuildTerrain;
+        }
     } else {
         // 邻格建造
         let dx = (target_x - cx).abs();
@@ -285,6 +290,11 @@ pub fn can_build(app: &App, recipe_index: usize, target_x: i32, target_y: i32) -
         }
         if !app.map.is_walkable(target_x, target_y) {
             return BuildCheck::Blocked;
+        }
+        // 浅水/深水不可建造
+        let terrain = app.map.terrain(target_x, target_y);
+        if terrain == TerrainKind::ShallowWater || terrain == TerrainKind::Water {
+            return BuildCheck::NoBuildTerrain;
         }
         if app.is_blocked(target_x, target_y) {
             return BuildCheck::Blocked;
@@ -311,6 +321,7 @@ pub enum BuildCheck {
     NoSupport,
     MissingMaterials,
     Invalid,
+    NoBuildTerrain, // 浅水不可建造
 }
 
 impl BuildCheck {
@@ -323,6 +334,7 @@ impl BuildCheck {
             BuildCheck::NoSupport => "没有支撑",
             BuildCheck::MissingMaterials => "材料不足",
             BuildCheck::Invalid => "无效",
+            BuildCheck::NoBuildTerrain => "水里建不了",
         }
     }
 }
@@ -355,6 +367,22 @@ pub fn start_build(app: &mut App, target_x: i32, target_y: i32, rng: &mut impl r
         return false;
     }
 
+    // ── 地形建造代价修正 ──
+    let build_terrain = if recipe.self_target {
+        app.map.terrain(cx, cy)
+    } else {
+        app.map.terrain(tx, ty)
+    };
+    let (extra_wood, terrain_progress_mult) = terrain_build_cost(build_terrain);
+
+    // 浅沼额外消耗 Wood×2
+    if extra_wood > 0
+        && !consume_extra_wood(app, extra_wood, cx, cy, rng)
+    {
+        app.push_log("浅沼建造需要额外木头打地基。".into());
+        return false;
+    }
+
     // 消耗材料
     if !consume_ingredients(app, recipe, cx, cy, rng) {
         app.push_log("材料不足。".into());
@@ -369,14 +397,68 @@ pub fn start_build(app: &mut App, target_x: i32, target_y: i32, rng: &mut impl r
 
     // 开始进度——保持弹窗，切换到 Building 状态
     let actor = match app.actor() { Some(a) => a, None => return false };
+    let adjusted_total = (recipe.base_progress as f32 * terrain_progress_mult).round() as u32;
     let _ = app.world.insert_one(actor, Building {
         recipe_index,
         progress: 0,
-        total: recipe.base_progress,
+        total: adjusted_total,
     });
     app.build_target = Some((tx, ty, recipe.result));
     app.build_menu = Some(BuildMenuState::Building { recipe_index });
     true
+}
+
+/// 地形建造代价：(额外木头, 进度倍率)
+fn terrain_build_cost(terrain: TerrainKind) -> (u32, f32) {
+    match terrain {
+        TerrainKind::ShallowMarsh => (2, 1.3), // 浅沼：+Wood×2，耗时×1.3
+        TerrainKind::Sand => (0, 1.1),         // 沙地：耗时×1.1
+        TerrainKind::Hill => (0, 1.4),         // 丘陵：耗时×1.4
+        _ => (0, 1.0),
+    }
+}
+
+/// 消耗额外木头（浅沼地基）
+fn consume_extra_wood(app: &mut App, needed: u32, cx: i32, cy: i32, rng: &mut impl rand::Rng) -> bool {
+    // 先检查是否够
+    let mut available = 0u32;
+    if let Some(actor) = app.actor() {
+        if let Ok(hands) = app.world.get::<&Hands>(actor) {
+            available += count_in_hand(&hands, ItemKind::Wood);
+        }
+    }
+    for dy in -2i32..=2 {
+        for dx in -2i32..=2 {
+            if dx.abs() + dy.abs() > 2 { continue; }
+            if let Some(pe) = crate::items::pile_at(app, cx + dx, cy + dy) {
+                if let Ok(pile) = app.world.get::<&Pile>(pe) {
+                    for slot in &pile.slots {
+                        if slot.item == ItemKind::Wood {
+                            available += slot.count;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if available < needed {
+        return false;
+    }
+    // 消耗
+    let mut remaining = needed;
+    if let Some(actor) = app.actor() {
+        if let Ok(mut hands) = app.world.get::<&mut Hands>(actor) {
+            remaining -= take_from_hand(&mut hands, ItemKind::Wood, remaining);
+        }
+    }
+    for dy in -2i32..=2 {
+        for dx in -2i32..=2 {
+            if dx.abs() + dy.abs() > 2 { continue; }
+            if remaining == 0 { break; }
+            remaining -= take_from_pile(app, cx + dx, cy + dy, ItemKind::Wood, remaining, rng);
+        }
+    }
+    remaining == 0
 }
 
 // ── 进度推进（每 tick 调用） ──

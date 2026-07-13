@@ -9,4 +9,8 @@
     "spear":       ( name: "矛",      glyph: '↑',  color: "red",      desc: "火烤硬化过的矛。尖端烧得乌黑发亮，刺进肉里比你的牙好用一万倍。" ),
     "stone_axe":   ( name: "石斧",    glyph: 'P',  color: "white",    desc: "大石头绑在木棍上——一把旧石器时代的瑞士军刀。砍树效率翻倍，砸人效率也翻倍。" ),
     "torch":       ( name: "火把",    glyph: 'i',  color: "yellow",   desc: "燃烧的木棍，顶端跳跃着橘色的火焰。移动的篝火，黑夜里的眼睛——虽然烧不了多久。" ),
+    "herb":        ( name: "草药",    glyph: 'h',  color: "green",    desc: "一株不知名的草药，揉碎后有股辛辣的香气。能不能吃？吃了才知道——但 v1 你吃不了。" ),
+    "clay":        ( name: "黏土",    glyph: 'c',  color: "yellow",   desc: "一团湿漉漉的黏土，从沼泽里抠出来的。以后能烧砖——现在只能攥在手里当镇纸。" ),
+    "metal_ore":   ( name: "金属矿",  glyph: 'm',  color: "gray",     desc: "一块沉甸甸的矿石，断口有金属光泽。等你有炉子再说——现在它只是块更值钱的石头。" ),
+    "poison_mush": ( name: "毒蘑菇",  glyph: 'p',  color: "magenta",  desc: "一丛颜色鲜艳的蘑菇。鲜艳通常意味着'别碰'——但你揣兜里也没人拦你。v1 吃不了。" ),
 }

@@ -2,8 +2,8 @@ use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::app::{
     App, CraftMenuState, DebugPopup, DebugSubKind, ExamineAction, ExamineMenu, GameMode, Speed,
-    DEBUG_ITEM_COUNT, DEBUG_SUB_CREATURES, DEBUG_SUB_SETTLEMENTS, DEBUG_SUB_TOOLS,
-    DEBUG_SUB_TIME, DEBUG_SUB_WEATHER, DEBUG_TIME_ITEMS, DEBUG_WEATHER_ITEMS,
+    DEBUG_ITEM_COUNT, DEBUG_SUB_CREATURES, DEBUG_SUB_SETTLEMENTS, DEBUG_SUB_TERRAIN, DEBUG_SUB_TOOLS,
+    DEBUG_SUB_TIME, DEBUG_SUB_WEATHER, DEBUG_TERRAIN_ITEMS, DEBUG_TIME_ITEMS, DEBUG_WEATHER_ITEMS,
     SIDE_TAB_COUNT, SETTLEMENT_SIZE_ITEMS,
 };
 use crate::components::{Building, Bush, BushState, CraftingState, Hunger, ItemKind, Position, Thirst, Tree};
@@ -348,6 +348,7 @@ fn handle_debug_popup_key(app: &mut App, key: KeyEvent) {
             DebugSubKind::Settlement => SETTLEMENT_SIZE_ITEMS.len().saturating_sub(1),
             DebugSubKind::TimePeriod => DEBUG_TIME_ITEMS.len().saturating_sub(1),
             DebugSubKind::WeatherKind => DEBUG_WEATHER_ITEMS.len().saturating_sub(1),
+            DebugSubKind::TerrainItem => DEBUG_TERRAIN_ITEMS.len().saturating_sub(1),
         };
 
         match key.code {
@@ -372,6 +373,7 @@ fn handle_debug_popup_key(app: &mut App, key: KeyEvent) {
                     }
                     DebugSubKind::TimePeriod => debug_set_time(app, sub_cursor),
                     DebugSubKind::WeatherKind => debug_set_weather(app, sub_cursor),
+                    DebugSubKind::TerrainItem => debug_spawn_terrain_item(app, sub_cursor),
                 }
                 app.debug_popup = None;
             }
@@ -421,6 +423,11 @@ fn handle_debug_popup_key(app: &mut App, key: KeyEvent) {
                     } else if cur == DEBUG_SUB_WEATHER {
                         if let Some(ref mut p) = app.debug_popup {
                             p.sub = Some(DebugSubKind::WeatherKind);
+                            p.sub_cursor = 0;
+                        }
+                    } else if cur == DEBUG_SUB_TERRAIN {
+                        if let Some(ref mut p) = app.debug_popup {
+                            p.sub = Some(DebugSubKind::TerrainItem);
                             p.sub_cursor = 0;
                         }
                     } else {
@@ -508,6 +515,7 @@ fn debug_execute(app: &mut App, idx: usize) {
                     Bush {
                         state: BushState::Fruiting,
                         growth_timer: 0,
+                        yield_item: ItemKind::Berry,
                     },
                 ));
                 app.mark_spatial_dirty();
@@ -549,6 +557,7 @@ fn debug_spawn_execute(app: &mut App, idx: usize) {
                     max_hp: 50.0,
                 },
                 crate::components::Wet { value: 0.0 },
+                crate::components::MoveCooldown { ticks: 0 },
             ));
             app.push_log("（调试）生成一只狼。".into());
         }
@@ -570,6 +579,7 @@ fn debug_spawn_execute(app: &mut App, idx: usize) {
                 },
                 crate::components::TraitTag("冷静".into()),
                 crate::components::Wet { value: 0.0 },
+                crate::components::MoveCooldown { ticks: 0 },
             ));
             app.push_log("（调试）生成一个殖民者。".into());
         }
@@ -587,6 +597,7 @@ fn debug_spawn_execute(app: &mut App, idx: usize) {
                 crate::components::Energy { value: 50.0 },
                 crate::components::Mood { value: 20.0 },
                 crate::components::Wet { value: 0.0 },
+                crate::components::MoveCooldown { ticks: 0 },
             ));
             app.push_log("（调试）生成一个俘虏。".into());
         }
@@ -644,6 +655,48 @@ fn debug_set_weather(app: &mut App, idx: usize) {
     app.weather_mood_tracker.clear();
     app.events.push(crate::events::GameEvent::WeatherChanged { from: old, to: weather });
     app.push_log(format!("（调试）天气设为{}。", weather.label()));
+}
+
+fn debug_spawn_terrain_item(app: &mut App, idx: usize) {
+    let (px, py) = app.actor_pos();
+    match idx {
+        0 => {
+            // 脚下刷草药
+            place_item(app, px, py, ItemKind::Herb, 3);
+            app.push_log("（调试）脚下刷了 3 株草药。".into());
+        }
+        1 => {
+            // 脚下刷黏土
+            place_item(app, px, py, ItemKind::Clay, 3);
+            app.push_log("（调试）脚下刷了 3 团黏土。".into());
+        }
+        2 => {
+            // 脚下刷金属矿
+            place_item(app, px, py, ItemKind::MetalOre, 3);
+            app.push_log("（调试）脚下刷了 3 块金属矿。".into());
+        }
+        3 => {
+            // 脚下刷毒蘑菇
+            place_item(app, px, py, ItemKind::PoisonMush, 3);
+            app.push_log("（调试）脚下刷了 3 朵毒蘑菇。".into());
+        }
+        4 => {
+            // 面前放狼巢穴
+            let tx = px + app.facing.0;
+            let ty = py + app.facing.1;
+            if app.map.is_walkable(tx, ty) && !app.is_blocked(tx, ty) {
+                app.world.spawn((
+                    Position { x: tx, y: ty },
+                    crate::components::WolfDen,
+                ));
+                app.mark_spatial_dirty();
+                app.push_log("（调试）面前放了一个狼巢穴。".into());
+            } else {
+                app.push_log("（调试）面前没空地放巢穴。".into());
+            }
+        }
+        _ => {}
+    }
 }
 
 fn handle_examine_dir_prompt_key(app: &mut App, key: KeyEvent) {

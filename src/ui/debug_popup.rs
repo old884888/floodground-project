@@ -5,9 +5,9 @@ use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 use ratatui::Frame;
 
 use crate::app::{
-    App, DebugSubKind, DEBUG_ITEMS, DEBUG_SUB_CREATURES, DEBUG_SUB_SETTLEMENTS, DEBUG_SUB_TIME,
-    DEBUG_SUB_TOOLS, DEBUG_SUB_WEATHER, DEBUG_TIME_ITEMS, DEBUG_WEATHER_ITEMS,
-    SPAWN_ITEMS, SETTLEMENT_SIZE_ITEMS, TOOL_ITEMS,
+    App, DebugSubKind, DEBUG_ITEMS, DEBUG_SUB_CREATURES, DEBUG_SUB_SETTLEMENTS, DEBUG_SUB_TERRAIN,
+    DEBUG_SUB_TIME, DEBUG_SUB_TOOLS, DEBUG_SUB_WEATHER, DEBUG_TERRAIN_ITEMS, DEBUG_TIME_ITEMS,
+    DEBUG_WEATHER_ITEMS, SPAWN_ITEMS, SETTLEMENT_SIZE_ITEMS, TOOL_ITEMS,
 };
 
 pub fn draw(frame: &mut Frame, app: &App, _map_area: Rect) {
@@ -35,6 +35,9 @@ pub fn draw(frame: &mut Frame, app: &App, _map_area: Rect) {
             DebugSubKind::WeatherKind => {
                 draw_sub_popup(frame, area, "天气", DEBUG_WEATHER_ITEMS, popup.sub_cursor, Color::Cyan);
             }
+            DebugSubKind::TerrainItem => {
+                draw_sub_popup(frame, area, "刷地形物品", DEBUG_TERRAIN_ITEMS, popup.sub_cursor, Color::Green);
+            }
         }
     } else {
         draw_debug_popup(frame, area, popup.cursor);
@@ -55,7 +58,7 @@ fn draw_debug_popup(frame: &mut Frame, area: Rect, cursor: usize) {
         let prefix = if i == cursor { "▶ " } else { "  " };
         let is_sub = matches!(
             i,
-            DEBUG_SUB_TOOLS | DEBUG_SUB_CREATURES | DEBUG_SUB_SETTLEMENTS | DEBUG_SUB_TIME | DEBUG_SUB_WEATHER
+            DEBUG_SUB_TOOLS | DEBUG_SUB_CREATURES | DEBUG_SUB_SETTLEMENTS | DEBUG_SUB_TIME | DEBUG_SUB_WEATHER | DEBUG_SUB_TERRAIN
         );
         let style = if i == cursor {
             Style::default()

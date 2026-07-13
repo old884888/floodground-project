@@ -73,6 +73,9 @@ fn draw_header(frame: &mut Frame, app: &App, area: Rect) {
         _ => Style::default().fg(Color::White),
     };
 
+    let (cx, cy) = app.actor_pos();
+    let terrain_name = crate::data::terrain_def(app.map.terrain(cx, cy).key()).display_name.clone();
+
     let line = Line::from(vec![
         Span::styled(
             " 血壤 ",
@@ -82,7 +85,7 @@ fn draw_header(frame: &mut Frame, app: &App, area: Rect) {
         ),
         Span::raw(format!("· Day {} · {:02}:{:02} · ", app.day, hh, mm)),
         Span::styled(period.to_string(), period_style),
-        Span::raw(format!(" · {} · ", app.game_mode.label())),
+        Span::raw(format!(" · {} · {} · ", app.game_mode.label(), terrain_name)),
         Span::styled(format!("声誉 {:+}", app.reputation), rep_style),
         Span::raw(format!(" · {} · ", app.weather.label())),
         Span::raw(app.speed.label().to_string()),

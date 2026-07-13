@@ -27,6 +27,10 @@ pub fn describe_tile(app: &App, x: i32, y: i32) -> Vec<String> {
     // 地形（始终第一行）
     if let Some(tile) = app.map.tile(x, y) {
         lines.push(format!("🟫 {}", tile.terrain_id));
+        let terrain_desc = describe_terrain(tile.terrain_kind);
+        if !terrain_desc.is_empty() {
+            lines.push(format!("  {}", terrain_desc));
+        }
     }
     if app.map.has_roof(x, y) {
         lines.push("  ⬜ 有屋顶覆盖".into());
@@ -210,6 +214,9 @@ fn describe_entity(app: &App, e: Entity) -> Option<String> {
         EntityKind::StickTrap => {
             "削尖的木棍埋在浅坑里，尖端朝上。踩上去能把脚掌刺个对穿——甭管是狼还是你自己。".into()
         }
+        EntityKind::WolfDen => {
+            "一个散发着腥臭味的土坑——狼的巢穴。附近总有眼睛在暗处盯着你。".into()
+        }
         EntityKind::Campfire => {
             "一团不屈的火焰，是这该死的世界里唯一温暖的谎言。烧的是木柴，暖的是希望——虽然两者都不持久。".into()
         }
@@ -251,4 +258,19 @@ fn describe_entity(app: &App, e: Entity) -> Option<String> {
 
 fn describe_item(item: ItemKind) -> String {
     crate::data::item_def(item.key()).desc.clone()
+}
+
+/// 地形描述（观察模式）
+fn describe_terrain(kind: TerrainKind) -> &'static str {
+    match kind {
+        TerrainKind::Grass => "你踩在松软的草地上。风从草尖溜过——这里什么都没发生过，什么都不会发生。",
+        TerrainKind::LightForest => "稀疏的树木投下斑驳的影子。走起来不算费劲，但总有人在看着你。",
+        TerrainKind::DenseForest => "树枝刮过你的脸——密林果然不好走。光到这里就累了，你呢？",
+        TerrainKind::Hill => "脚下的坡度让你喘了口气。站高点能看得远——也能被人看得更清。",
+        TerrainKind::ShallowMarsh => "泥水浸过你的鞋底。每一步都在吮吸——这地方在尝试吞掉你。",
+        TerrainKind::ShallowWater => "浅水没过脚踝。涉水前行，裤脚已经湿透——但至少还站得稳。",
+        TerrainKind::Sand => "松软的沙地让每一步都打滑。脚印留不了多久——风会替你抹掉。",
+        TerrainKind::Water => "深水区。你不会游泳——或者说，你想试试吗？",
+        TerrainKind::Dirt => "踩实的泥土，营地的味道。说不上好闻，但至少熟悉。",
+    }
 }

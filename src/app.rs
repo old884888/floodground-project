@@ -43,6 +43,7 @@ pub const DEBUG_ITEMS: &[&str] = &[
     "时间 +2h",
     "时间/日夜 ▶",
     "天气 ▶",
+    "刷地形物品 ▶",
 ];
 
 pub const SPAWN_ITEMS: &[&str] = &["狼", "殖民者", "俘虏"];
@@ -57,6 +58,7 @@ pub const SETTLEMENT_SIZE_ITEMS: &[(&str, VillageSize)] = &[
 
 pub const DEBUG_TIME_ITEMS: &[&str] = &["黎明", "白天", "黄昏", "夜晚"];
 pub const DEBUG_WEATHER_ITEMS: &[&str] = &["晴", "阴", "毛毛雨", "中雨", "暴雨", "雷阵雨"];
+pub const DEBUG_TERRAIN_ITEMS: &[&str] = &["草药", "黏土", "金属矿", "毒蘑菇", "狼巢穴"];
 
 pub const DEBUG_ITEM_COUNT: usize = DEBUG_ITEMS.len();
 
@@ -66,6 +68,7 @@ pub const DEBUG_SUB_CREATURES: usize = 9;
 pub const DEBUG_SUB_SETTLEMENTS: usize = 10;
 pub const DEBUG_SUB_TIME: usize = 12;
 pub const DEBUG_SUB_WEATHER: usize = 13;
+pub const DEBUG_SUB_TERRAIN: usize = 14;
 
 // ── 天气 ──
 
@@ -313,6 +316,7 @@ pub enum DebugSubKind {
     Settlement,
     TimePeriod,
     WeatherKind,
+    TerrainItem,
 }
 
 /// 视口左上角世界坐标；跟随玩家，边缘 clamp
@@ -509,6 +513,7 @@ impl App {
             },
             TraitTag(trait_tag),
             Wet { value: 0.0 },
+            MoveCooldown { ticks: 0 },
         ));
 
         let _c1 = world.spawn((
@@ -545,6 +550,7 @@ impl App {
                     .unwrap_or_else(|| "敏感".to_string()),
             ),
             Wet { value: 0.0 },
+            MoveCooldown { ticks: 0 },
         ));
 
         let _c2 = world.spawn((
@@ -581,6 +587,7 @@ impl App {
                     .unwrap_or_else(|| "冲动".to_string()),
             ),
             Wet { value: 0.0 },
+            MoveCooldown { ticks: 0 },
         ));
 
         let _captive = world.spawn((
@@ -599,6 +606,7 @@ impl App {
             Energy { value: 50.0 },
             Mood { value: 20.0 },
             Wet { value: 0.0 },
+            MoveCooldown { ticks: 0 },
         ));
 
         // 营区篝火：夜晚的家
@@ -811,7 +819,12 @@ impl App {
                 8.0 // 夜晚后半
             }
         };
-        (base * self.weather.visibility_multiplier()).max(1.0) as i32
+        // ── 地形视野修正：actor 脚下地形的 vis_mod + vis_flat ──
+        let (ax, ay) = self.actor_pos();
+        let terrain = self.map.terrain(ax, ay);
+        let def = crate::data::terrain_def(terrain.key());
+        let multiplied = base * self.weather.visibility_multiplier() * def.vis_mod;
+        (multiplied + def.vis_flat as f32).max(1.0) as i32
     }
 
     /// 天气颜色乘数暴露给 map_view
@@ -1186,6 +1199,7 @@ fn spawn_props(world: &mut World, props: &[crate::world::PropSpawn], rng: &mut i
                     Bush {
                         state,
                         growth_timer: timer,
+                        yield_item: ItemKind::Berry,
                     },
                 ));
             }
@@ -1198,6 +1212,48 @@ fn spawn_props(world: &mut World, props: &[crate::world::PropSpawn], rng: &mut i
                 let mut pile = Pile::default();
                 pile.add(ItemKind::SmallStone, 1);
                 world.spawn((Position { x: p.x, y: p.y }, pile));
+            }
+            PropKind::Reed => {
+                // 芦苇：可采摘产出草药
+                world.spawn((
+                    Position { x: p.x, y: p.y },
+                    Bush {
+                        state: BushState::Fruiting,
+                        growth_timer: 0,
+                        yield_item: ItemKind::Herb,
+                    },
+                ));
+            }
+            PropKind::PoisonMush => {
+                // 毒蘑菇：可采摘，v1 不可食用
+                world.spawn((
+                    Position { x: p.x, y: p.y },
+                    Bush {
+                        state: BushState::Fruiting,
+                        growth_timer: 0,
+                        yield_item: ItemKind::PoisonMush,
+                    },
+                ));
+            }
+            PropKind::MetalVein => {
+                // 金属矿脉：可挖矿产出金属矿
+                world.spawn((
+                    Position { x: p.x, y: p.y },
+                    Boulder,
+                    BlocksMovement,
+                    Harvestable {
+                        hp: 2000.0,
+                        max_hp: 2000.0,
+                        yield_item: ItemKind::MetalOre,
+                        yield_hp_step: 200.0,
+                    },
+                ));
+            }
+            PropKind::WolfDen => {
+                world.spawn((
+                    Position { x: p.x, y: p.y },
+                    WolfDen,
+                ));
             }
         }
     }
@@ -1270,6 +1326,7 @@ fn spawn_wolves(world: &mut World, map: &GameMap, spatial: &SpatialIndex, rng: &
                     max_hp: 50.0,
                 },
                 Wet { value: 0.0 },
+                MoveCooldown { ticks: 0 },
             ));
             spawned += 1;
         }

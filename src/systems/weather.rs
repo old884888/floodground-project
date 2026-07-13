@@ -56,10 +56,18 @@ fn update_wet(app: &mut App) {
     for (e, (pos, _wet)) in app.world.query::<(&Position, &Wet)>().iter() {
 
         let mut delta = 0.0f32;
+        let terrain = app.map.terrain(pos.x, pos.y);
+        let terrain_def = crate::data::terrain_def(terrain.key());
 
-        // 淋雨：户外（无屋顶）→ 涨
+        // 淋雨：户外（无屋顶）→ 涨，受地形 rain_shield 削减
         if wet_rate > 0.0 && !app.map.has_roof(pos.x, pos.y) {
-            delta += wet_rate;
+            let effective_rate = wet_rate * (1.0 - terrain_def.rain_shield);
+            delta += effective_rate;
+        }
+
+        // 地形自动潮湿（浅水/浅沼）
+        if terrain_def.auto_wet && !app.map.has_roof(pos.x, pos.y) {
+            delta += terrain.auto_wet_rate();
         }
 
         // 干燥条件（可叠加）

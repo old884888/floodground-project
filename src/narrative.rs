@@ -1,9 +1,20 @@
 use crate::app::App;
+use crate::components::TerrainKind;
 use crate::events::GameEvent;
 
 pub fn format_event(app: &App, event: &GameEvent) -> Option<String> {
     match event {
         GameEvent::DayElapsed(day) => Some(format!("—— 第 {} 天 ——", day)),
+        GameEvent::CharacterMoved { entity, from: _, to } => {
+            // 进入特殊地形 → L1 日志
+            let terrain = app.map.terrain(to.0, to.1);
+            let msg = terrain_enter_text(terrain);
+            if !msg.is_empty() && Some(*entity) == app.actor() {
+                Some(msg.into())
+            } else {
+                None
+            }
+        }
         GameEvent::Ate { entity } => {
             let name = entity_name(app, *entity);
             Some(format!("{}找了点东西填肚子。", name))
@@ -52,4 +63,16 @@ pub fn format_event(app: &App, event: &GameEvent) -> Option<String> {
 
 fn entity_name(app: &App, entity: hecs::Entity) -> String {
     app.entity_label(entity)
+}
+
+/// 进入特殊地形的 L1 日志（只对特殊地形返回非空）
+fn terrain_enter_text(kind: TerrainKind) -> &'static str {
+    match kind {
+        TerrainKind::DenseForest => "树枝刮过你的脸——密林果然不好走。",
+        TerrainKind::Hill => "脚下的坡度变了——你爬上了丘陵。",
+        TerrainKind::ShallowMarsh => "泥水浸过你的鞋——浅沼，每一步都在吮吸。",
+        TerrainKind::ShallowWater => "水没过脚踝。涉水前行，裤脚已经湿透。",
+        TerrainKind::Sand => "脚踩上松软的沙地——脚印留不了多久。",
+        _ => "",
+    }
 }

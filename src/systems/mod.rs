@@ -12,6 +12,7 @@ pub mod movement;
 pub mod nature;
 pub mod needs;
 pub mod reaction;
+pub mod terrain_gen;
 pub mod weather;
 
 use crate::app::{App, Speed};
@@ -62,6 +63,9 @@ pub fn run_tick(app: &mut App, rng: &mut impl rand::Rng) {
         app.action_lock = None;
     }
 
+    // 移动冷却递减（所有带 MoveCooldown 的实体）
+    movement::tick_cooldowns(app);
+
     if player_alive && app.pending_grab {
         app.pending_grab = false;
         interact::try_grab(app, rng);
@@ -104,6 +108,7 @@ pub fn run_tick(app: &mut App, rng: &mut impl rand::Rng) {
         combat::update_combat(app, rng);
     }
     nature::update_bushes(app);
+    terrain_gen::update_wolf_dens(app, rng);
 
     check_action_lock(app);
 

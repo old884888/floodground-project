@@ -24,7 +24,7 @@ use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 
 use app::App;
-use data::{init_item_registry, load_actors, load_food, load_terrain, DataError};
+use data::{init_item_registry, init_terrain_registry, load_actors, load_food, load_terrain, DataError};
 use systems::{run_tick, ticks_this_frame};
 
 fn main() -> io::Result<()> {
@@ -33,6 +33,9 @@ fn main() -> io::Result<()> {
         Ok(t) => t,
         Err(e) => return Err(data_error_to_io(e)),
     };
+    if let Err(e) = init_terrain_registry(terrain.clone()) {
+        return Err(data_error_to_io(e));
+    }
     let actors = match load_actors("assets/data/actors.ron") {
         Ok(a) => a,
         Err(e) => return Err(data_error_to_io(e)),

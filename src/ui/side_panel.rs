@@ -77,6 +77,12 @@ fn draw_tab_character(app: &App) -> Vec<Line<'static>> {
             lines.push(Line::from(format!("坐标 ({}, {})", pos.x, pos.y)));
         }
 
+        // 脚下地形
+        if let Ok(pos) = app.world.get::<&Position>(entity) {
+            let terrain = app.map.terrain(pos.x, pos.y);
+            lines.push(Line::from(format!("地形 {}", terrain_name(terrain))));
+        }
+
         if let Ok(t) = app.world.get::<&TraitTag>(entity) {
             lines.push(Line::from(format!("性格 {}", t.0)));
         }
@@ -254,6 +260,22 @@ fn bar_line(label: &str, value: f32, max: f32, color: Color) -> Line<'static> {
         Span::styled(bar, Style::default().fg(color)),
         Span::raw(format!(" {:>3.0}", value)),
     ])
+}
+
+/// 地形显示名
+fn terrain_name(kind: crate::components::TerrainKind) -> &'static str {
+    use crate::components::TerrainKind::*;
+    match kind {
+        Grass => "草地",
+        LightForest => "疏林",
+        DenseForest => "密林",
+        Hill => "丘陵",
+        ShallowMarsh => "浅沼",
+        ShallowWater => "浅水",
+        Sand => "沙地",
+        Water => "深水",
+        Dirt => "泥土",
+    }
 }
 
 fn draw_observe(frame: &mut Frame, app: &App, area: Rect, fx: i32, fy: i32) {

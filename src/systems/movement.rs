@@ -1,5 +1,6 @@
 use crate::app::App;
-use crate::components::Position;
+use crate::components::{MoveCooldown, Position};
+use crate::data::terrain_def;
 use crate::events::GameEvent;
 
 pub fn apply_pending_move(app: &mut App, rng: &mut impl rand::Rng) {
@@ -15,6 +16,17 @@ pub fn apply_pending_move(app: &mut App, rng: &mut impl rand::Rng) {
         app.push_log("没有能动的人。".into());
         return;
     };
+
+    // ── MoveCooldown 检查：地形 move_cost 引起的冷却 ──
+    {
+        if let Ok(cd) = app.world.get::<&MoveCooldown>(actor) {
+            if cd.ticks > 0 {
+                // 冷却中，不响应移动
+                return;
+            }
+        }
+    }
+
     let from = {
         let Ok(pos) = app.world.get::<&Position>(actor) else {
             return;
@@ -76,6 +88,16 @@ pub fn apply_pending_move(app: &mut App, rng: &mut impl rand::Rng) {
         pos.y = to.1;
     }
 
+    // ── 设置移动冷却：根据落点地形 move_cost ──
+    let move_cost = terrain_move_cost(app, to.0, to.1);
+    if move_cost > 0.0 {
+        let cooldown = (1.0 / move_cost).ceil() as u32;
+        let cd = cooldown.saturating_sub(1);
+        if let Ok(mut mc) = app.world.get::<&mut MoveCooldown>(actor) {
+            mc.ticks = cd;
+        }
+    }
+
     // ── 陷阱触发 ──
     crate::systems::building::trigger_trap_at(app, to.0, to.1, actor);
 
@@ -86,4 +108,19 @@ pub fn apply_pending_move(app: &mut App, rng: &mut impl rand::Rng) {
         from,
         to,
     });
+}
+
+/// 查地形 move_cost：从 terrain.ron 注册表查表
+pub fn terrain_move_cost(app: &App, x: i32, y: i32) -> f32 {
+    let kind = app.map.terrain(x, y);
+    terrain_def(kind.key()).move_cost
+}
+
+/// 每 tick 递减所有 MoveCooldown
+pub fn tick_cooldowns(app: &mut App) {
+    for (_e, cd) in app.world.query::<&mut MoveCooldown>().iter() {
+        if cd.ticks > 0 {
+            cd.ticks -= 1;
+        }
+    }
 }

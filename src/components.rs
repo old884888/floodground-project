@@ -70,6 +70,77 @@ pub struct TraitTag(pub String);
 
 // —— 世界实体（Planmini1）——
 
+// —— 地形类型（Plan 07）——
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TerrainKind {
+    Grass,
+    LightForest,
+    DenseForest,
+    Hill,
+    ShallowMarsh,
+    ShallowWater,
+    Sand,
+    Water,
+    Dirt,
+}
+
+impl TerrainKind {
+    /// 对应 terrain.ron 里的 key
+    pub fn key(self) -> &'static str {
+        match self {
+            TerrainKind::Grass => "grass",
+            TerrainKind::LightForest => "light_forest",
+            TerrainKind::DenseForest => "dense_forest",
+            TerrainKind::Hill => "hill",
+            TerrainKind::ShallowMarsh => "shallow_marsh",
+            TerrainKind::ShallowWater => "shallow_water",
+            TerrainKind::Sand => "sand",
+            TerrainKind::Water => "water",
+            TerrainKind::Dirt => "dirt",
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn from_key(s: &str) -> Option<Self> {
+        Some(match s {
+            "grass" => TerrainKind::Grass,
+            "light_forest" => TerrainKind::LightForest,
+            "dense_forest" => TerrainKind::DenseForest,
+            "hill" => TerrainKind::Hill,
+            "shallow_marsh" => TerrainKind::ShallowMarsh,
+            "shallow_water" => TerrainKind::ShallowWater,
+            "sand" => TerrainKind::Sand,
+            "water" => TerrainKind::Water,
+            "dirt" => TerrainKind::Dirt,
+            _ => return None,
+        })
+    }
+
+    /// 站在该地形上每 tick 自动潮湿增量
+    pub fn auto_wet_rate(self) -> f32 {
+        match self {
+            TerrainKind::ShallowMarsh => 0.05,
+            TerrainKind::ShallowWater => 0.08,
+            TerrainKind::Water => 0.10,
+            _ => 0.0,
+        }
+    }
+}
+
+use serde::{Deserialize, Serialize};
+
+/// 移动冷却：移动后按地形 move_cost 设定，>0 时不响应移动
+#[derive(Debug, Clone, Copy, Default)]
+pub struct MoveCooldown {
+    pub ticks: u32,
+}
+
+/// 狼巢穴：单格实体，周围定期刷狼
+#[derive(Debug, Clone, Copy)]
+pub struct WolfDen;
+
 #[derive(Debug, Clone, Copy)]
 pub struct Tree;
 
@@ -87,6 +158,8 @@ pub enum BushState {
 pub struct Bush {
     pub state: BushState,
     pub growth_timer: u64,
+    /// 采摘产出物品（普通灌木=Berry，芦苇=Herb，毒蘑菇=PoisonMush）
+    pub yield_item: ItemKind,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -185,6 +258,11 @@ pub enum ItemKind {
     Spear,
     StoneAxe,
     Torch,
+    // Plan 07：地形差异化产出
+    Herb,       // 草药（密林/浅沼采摘）
+    Clay,       // 黏土（浅沼采集）
+    MetalOre,   // 金属矿（丘陵挖矿）
+    PoisonMush, // 毒蘑菇（密林/浅沼采摘，v1 不可食用）
 }
 
 impl ItemKind {
@@ -201,6 +279,10 @@ impl ItemKind {
             ItemKind::Spear => "spear",
             ItemKind::StoneAxe => "stone_axe",
             ItemKind::Torch => "torch",
+            ItemKind::Herb => "herb",
+            ItemKind::Clay => "clay",
+            ItemKind::MetalOre => "metal_ore",
+            ItemKind::PoisonMush => "poison_mush",
         }
     }
 
@@ -504,5 +586,27 @@ impl Wet {
         } else {
             15.0
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn terrain_kind_auto_wet_rate() {
+        assert_eq!(TerrainKind::ShallowMarsh.auto_wet_rate(), 0.05);
+        assert_eq!(TerrainKind::ShallowWater.auto_wet_rate(), 0.08);
+        assert_eq!(TerrainKind::Water.auto_wet_rate(), 0.10);
+        assert_eq!(TerrainKind::Grass.auto_wet_rate(), 0.0);
+        assert_eq!(TerrainKind::DenseForest.auto_wet_rate(), 0.0);
+    }
+
+    #[test]
+    fn item_kind_new_keys_exist() {
+        assert_eq!(ItemKind::Herb.key(), "herb");
+        assert_eq!(ItemKind::Clay.key(), "clay");
+        assert_eq!(ItemKind::MetalOre.key(), "metal_ore");
+        assert_eq!(ItemKind::PoisonMush.key(), "poison_mush");
     }
 }

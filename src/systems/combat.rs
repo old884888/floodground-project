@@ -1,7 +1,7 @@
 use rand::Rng;
 
 use crate::app::App;
-use crate::components::{Colonist, Dead, Fleeing, Health, Hostile, Player, Position};
+use crate::components::{Colonist, Dead, Fleeing, Health, Hostile, MoveCooldown, Player, Position};
 use crate::items::drop_item_near;
 
 const PERCEPTION_RANGE: i32 = 8;
@@ -52,6 +52,13 @@ pub fn update_combat(app: &mut App, rng: &mut impl Rng) {
         .collect();
 
     for (entity, ex, ey, fleeing, hp, max_hp) in enemies {
+        // ── MoveCooldown：狼在地形里走慢了也得等 ──
+        if let Ok(cd) = app.world.get::<&MoveCooldown>(entity) {
+            if cd.ticks > 0 {
+                continue;
+            }
+        }
+
         let dist = (ex - px).abs().max((ey - py).abs());
 
         if fleeing {
@@ -198,6 +205,20 @@ fn try_move(app: &mut App, entity: hecs::Entity, ex: i32, ey: i32, dirs: &[(i32,
         }
         // 陷阱触发
         crate::systems::building::trigger_trap_at(app, nx, ny, entity);
+        // 地形移动冷却
+        let cost = crate::systems::movement::terrain_move_cost(app, nx, ny);
+        if cost > 0.0 {
+            let cd = (1.0 / cost).ceil() as u32;
+            let cd = cd.saturating_sub(1);
+            let has_mc = app.world.get::<&MoveCooldown>(entity).is_ok();
+            if has_mc {
+                if let Ok(mut mc) = app.world.get::<&mut MoveCooldown>(entity) {
+                    mc.ticks = cd;
+                }
+            } else {
+                let _ = app.world.insert_one(entity, MoveCooldown { ticks: cd });
+            }
+        }
         app.mark_spatial_dirty();
         return true;
     }

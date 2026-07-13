@@ -25,10 +25,20 @@ pub enum DataError {
 pub struct TerrainDef {
     pub display_name: String,
     pub symbol: String,
-    pub color_fg: String,
-    pub color_bg: String,
+    pub color_fg: (u8, u8, u8),
+    pub color_bg: (u8, u8, u8),
     pub is_walkable: bool,
     pub blocks_vision: bool,
+    /// 移动 1 格消耗的 tick 倍率，1.0=正常，0=不可通行
+    pub move_cost: f32,
+    /// 视野半径乘数（密林 0.5 = 砍半）
+    pub vis_mod: f32,
+    /// 视野半径固定加成（丘陵 +3、沙地 +5）
+    pub vis_flat: i32,
+    /// 遮雨比例 0.0-1.0
+    pub rain_shield: f32,
+    /// 站在上面是否持续获得潮湿
+    pub auto_wet: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -61,6 +71,39 @@ pub fn load_terrain(path: &str) -> Result<TerrainMap, DataError> {
         path: path.into(),
         message: e.to_string(),
     })
+}
+
+// ── 地形注册表（数据驱动，运行时查 move_cost/vis_mod 等）──
+
+static TERRAIN_REGISTRY: OnceLock<TerrainMap> = OnceLock::new();
+
+pub fn init_terrain_registry(map: TerrainMap) -> Result<(), DataError> {
+    TERRAIN_REGISTRY.set(map).map_err(|_| DataError::Validation {
+        path: "terrain.ron".into(),
+        message: "TERRAIN_REGISTRY 已初始化过".into(),
+    })
+}
+
+pub fn terrain_def(key: &str) -> &TerrainDef {
+    TERRAIN_REGISTRY
+        .get()
+        .and_then(|m| m.get(key))
+        .unwrap_or_else(|| {
+            static FALLBACK: OnceLock<TerrainDef> = OnceLock::new();
+            FALLBACK.get_or_init(|| TerrainDef {
+                display_name: "???".into(),
+                symbol: "?".into(),
+                color_fg: (255, 255, 255),
+                color_bg: (0, 0, 0),
+                is_walkable: true,
+                blocks_vision: false,
+                move_cost: 1.0,
+                vis_mod: 1.0,
+                vis_flat: 0,
+                rain_shield: 0.0,
+                auto_wet: false,
+            })
+        })
 }
 
 pub fn load_actors(path: &str) -> Result<ActorsConfig, DataError> {

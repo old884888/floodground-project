@@ -2,7 +2,7 @@ use rand::Rng;
 
 use crate::app::App;
 use crate::components::{
-    Boulder, Bush, BushState, Hands, Harvestable, ItemKind, Position, Tree, Wall,
+    Boulder, Bush, BushState, Hands, Harvestable, ItemKind, Position, TerrainKind, Tree, Wall,
 };
 use crate::events::GameEvent;
 use crate::items::drop_item_near;
@@ -23,6 +23,22 @@ enum TargetKind {
     Tree,
     Boulder,
     WallTarget,
+}
+
+/// 地形差异化产出倍率（砍树/挖矿通用）
+fn terrain_yield_multiplier(kind: &TargetKind, terrain: TerrainKind) -> u32 {
+    match (kind, terrain) {
+        // 密林砍树：木头×2
+        (TargetKind::Tree, TerrainKind::DenseForest) => 2,
+        // 疏林砍树：木头×1（正常）
+        (TargetKind::Tree, TerrainKind::LightForest) => 1,
+        // 其他地形砍树：正常
+        (TargetKind::Tree, _) => 1,
+        // 挖矿不翻倍（丘陵的额外产出单独处理）
+        (TargetKind::Boulder, _) => 1,
+        // 砸墙不受地形影响
+        (TargetKind::WallTarget, _) => 1,
+    }
 }
 
 fn hit_harvestable(app: &mut App, rng: &mut impl Rng, kind: TargetKind) {
@@ -93,8 +109,20 @@ fn hit_harvestable(app: &mut App, rng: &mut impl Rng, kind: TargetKind) {
         .map(|p| (p.x, p.y))
         .unwrap_or((px, py));
 
-    for _ in 0..drops {
+    // ── 地形差异化产出 ──
+    let actor_terrain = app.map.terrain(px, py);
+    let multiplier = terrain_yield_multiplier(&kind, actor_terrain);
+    let total_drops = drops * multiplier;
+    for _ in 0..total_drops {
         drop_item_near(app, tx, (px, py), yield_item, 1);
+    }
+
+    // 额外产出：丘陵挖矿 20% 概率额外掉金属矿
+    if matches!(kind, TargetKind::Boulder)
+        && actor_terrain == TerrainKind::Hill
+        && rng.gen_bool(0.20)
+    {
+        drop_item_near(app, tx, (px, py), ItemKind::MetalOre, 1);
     }
 
     match kind {
@@ -171,15 +199,15 @@ pub fn try_harvest_bush(app: &mut App, rng: &mut impl Rng) -> bool {
         Err(_) => return false,
     };
 
-    let mut target: Option<hecs::Entity> = None;
+    let mut target: Option<(hecs::Entity, ItemKind)> = None;
     for (e, (pos, bush)) in app.world.query::<(&Position, &Bush)>().iter() {
         let dist = (pos.x - px).abs() + (pos.y - py).abs();
         if dist == 1 && bush.state == BushState::Fruiting {
-            target = Some(e);
+            target = Some((e, bush.yield_item));
             break;
         }
     }
-    let Some(entity) = target else {
+    let Some((entity, yield_item)) = target else {
         return false;
     };
 
@@ -205,26 +233,61 @@ pub fn try_harvest_bush(app: &mut App, rng: &mut impl Rng) -> bool {
     let mut remaining = count;
     {
         if let Ok(mut hands) = app.world.get::<&mut Hands>(actor) {
-            let took = hands.take_n(ItemKind::Berry, remaining);
+            let took = hands.take_n(yield_item, remaining);
             remaining -= took;
         }
     }
 
     let taken = count - remaining;
     if remaining > 0 {
-        drop_item_near(app, (px, py), (px, py), ItemKind::Berry, remaining);
+        drop_item_near(app, (px, py), (px, py), yield_item, remaining);
     }
 
+    // ── 地形额外产出 ──
+    let actor_terrain = app.map.terrain(px, py);
+    let extra = terrain_harvest_extra(actor_terrain, rng);
+    if let Some((extra_item, extra_count)) = extra {
+        let mut extra_remaining = extra_count;
+        if let Ok(mut hands) = app.world.get::<&mut Hands>(actor) {
+            extra_remaining -= hands.take_n(extra_item, extra_remaining);
+        }
+        if extra_remaining > 0 {
+            drop_item_near(app, (px, py), (px, py), extra_item, extra_remaining);
+        }
+    }
+
+    let item_name = yield_item.label();
     if taken > 0 && remaining > 0 {
         app.push_log(format!(
-            "你从灌木摘了 {} 个莓果，手里拿不下的掉在地上。",
-            count
+            "你从灌木摘了 {} 个{}，手里拿不下的掉在地上。",
+            count, item_name
         ));
     } else if taken > 0 {
-        app.push_log(format!("你从灌木摘了 {} 个莓果。", taken));
+        app.push_log(format!("你从灌木摘了 {} 个{}。", taken, item_name));
     } else {
-        app.push_log(format!("{} 个莓果全掉在地上。", count));
+        app.push_log(format!("{} 个{}全掉在地上。", count, item_name));
     }
     app.events.push(GameEvent::BushHarvested { count });
     true
+}
+
+/// 地形采摘额外产出（浅沼出黏土40%，密林出草药10%）
+fn terrain_harvest_extra(terrain: TerrainKind, rng: &mut impl Rng) -> Option<(ItemKind, u32)> {
+    match terrain {
+        TerrainKind::ShallowMarsh => {
+            if rng.gen_bool(0.40) {
+                Some((ItemKind::Clay, 1))
+            } else {
+                None
+            }
+        }
+        TerrainKind::DenseForest => {
+            if rng.gen_bool(0.10) {
+                Some((ItemKind::Herb, 1))
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
 }

@@ -1,7 +1,7 @@
 use rand::Rng;
 
 use crate::app::App;
-use crate::components::{Act, AiState, Colonist, Energy, Hunger, Name, Position, Thirst};
+use crate::components::{Act, AiState, Colonist, Energy, Hunger, MoveCooldown, Name, Position, Thirst};
 use crate::events::GameEvent;
 
 pub fn update_ai(app: &mut App, rng: &mut impl Rng) {
@@ -48,6 +48,12 @@ pub fn update_ai(app: &mut App, rng: &mut impl Rng) {
                 actions.push((entity, Act::Sleeping, name));
             }
             Act::Idle => {
+                // 移动冷却：地形导致的减速，>0 时本 tick 不移动
+                if let Ok(cd) = app.world.get::<&MoveCooldown>(entity) {
+                    if cd.ticks > 0 {
+                        continue;
+                    }
+                }
                 let (px, py) = match app.world.get::<&Position>(entity) {
                     Ok(pos) => (pos.x, pos.y),
                     Err(_) => continue,
@@ -74,7 +80,17 @@ pub fn update_ai(app: &mut App, rng: &mut impl Rng) {
             pos.x = nx;
             pos.y = ny;
         }
+        // 地形移动冷却
+        let cost = crate::systems::movement::terrain_move_cost(app, nx, ny);
+        if cost > 0.0 {
+            let cd = (1.0 / cost).ceil() as u32;
+            let cd = cd.saturating_sub(1);
+            if let Ok(mut mc) = app.world.get::<&mut MoveCooldown>(entity) {
+                mc.ticks = cd;
+            }
+        }
         crate::systems::building::trigger_trap_at(app, nx, ny, entity);
+        app.mark_spatial_dirty();
     }
 
     for (entity, act, _name) in actions {

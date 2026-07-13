@@ -56,7 +56,7 @@ pub fn draw(frame: &mut Frame, app: &mut App, area: Rect) {
             if !visible {
                 if app.map.is_revealed(wx, wy) {
                     if let Some(tile) = app.map.tile(wx, wy) {
-                        let fg = memory_fg(&tile.color_fg);
+                        let fg = memory_fg(tile.color_fg);
                         let bg = Color::Rgb(0, 3, 0);
                         spans.push(Span::styled(
                             tile.symbol.to_string(),
@@ -226,8 +226,8 @@ fn terrain_colors(
     dim: bool,
     lit: bool,
 ) -> (Color, Color) {
-    let mut fg = parse_color(&tile.color_fg);
-    let mut bg = parse_color(&tile.color_bg);
+    let mut fg = Color::Rgb(tile.color_fg.0, tile.color_fg.1, tile.color_fg.2);
+    let mut bg = Color::Rgb(tile.color_bg.0, tile.color_bg.1, tile.color_bg.2);
     if lit {
         bg = Color::Rgb(40, 25, 0);
         return (fg, bg);
@@ -256,17 +256,13 @@ fn dim_color(c: Color, dim: bool) -> Color {
     }
 }
 
-fn memory_fg(color_name: &str) -> Color {
-    match color_name {
-        "green" | "dark_green" => Color::Rgb(0, 15, 0),
-        "cyan" => Color::Rgb(0, 8, 12),
-        "blue" => Color::Rgb(0, 0, 10),
-        "yellow" => Color::Rgb(20, 12, 0),
-        "red" => Color::Rgb(20, 0, 0),
-        "white" | "gray" | "grey" => Color::Rgb(12, 12, 12),
-        "magenta" => Color::Rgb(12, 0, 12),
-        _ => Color::Rgb(0, 8, 0),
-    }
+fn memory_fg(rgb: (u8, u8, u8)) -> Color {
+    // 记忆色：原色压暗到 ~6%
+    Color::Rgb(
+        (rgb.0 as u16 * 6 / 100).min(255) as u8,
+        (rgb.1 as u16 * 6 / 100).min(255) as u8,
+        (rgb.2 as u16 * 6 / 100).min(255) as u8,
+    )
 }
 
 fn parse_color(name: &str) -> Color {

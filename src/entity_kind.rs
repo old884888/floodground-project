@@ -35,6 +35,7 @@ pub enum EntityKind {
     Pile(Option<ItemKind>),       // 主导物品
     CraftWip(usize, u32),         // 半成品（recipe_index, progress）
     StickTrap,                    // 尖刺陷阱
+    WolfDen,                      // 狼巢穴
     Named(String),                // 兜底
 }
 
@@ -94,6 +95,9 @@ impl EntityKind {
         if app.world.get::<&StickTrap>(e).is_ok() {
             return EntityKind::StickTrap;
         }
+        if app.world.get::<&WolfDen>(e).is_ok() {
+            return EntityKind::WolfDen;
+        }
         if app.world.get::<&DirtRoad>(e).is_ok() {
             return EntityKind::DirtRoad;
         }
@@ -126,6 +130,7 @@ impl EntityKind {
             EntityKind::CraftWip(_, _) => 14,
             EntityKind::Floor => 5,
             EntityKind::StickTrap => 20,
+            EntityKind::WolfDen => 25,
             EntityKind::DirtRoad | EntityKind::StoneRoad => 4,
             EntityKind::Named(_) => 1,
         }
@@ -160,6 +165,7 @@ impl EntityKind {
             EntityKind::DirtRoad => ('·', Color::Rgb(130, 100, 50)),
             EntityKind::StoneRoad => ('·', Color::Rgb(150, 150, 150)),
             EntityKind::StickTrap => ('↓', Color::Rgb(180, 40, 40)),
+            EntityKind::WolfDen => ('Ω', Color::Rgb(120, 60, 30)),
             EntityKind::Pile(Some(item)) => crate::ui::item_glyph(*item),
             EntityKind::Pile(None) => ('.', Color::DarkGray),
             EntityKind::CraftWip(_, _) => ('…', Color::Yellow),
