@@ -557,6 +557,14 @@ pub struct StickTrap {
     pub builder: hecs::Entity,
 }
 
+/// Plan 08 建筑标记
+#[derive(Debug, Clone, Copy)]
+pub struct LeanTo;
+#[derive(Debug, Clone, Copy)]
+pub struct PitShelter;
+#[derive(Debug, Clone, Copy)]
+pub struct SmokingRack;
+
 impl Hunger {
     pub fn clamp(&mut self) {
         self.value = self.value.clamp(0.0, 100.0);

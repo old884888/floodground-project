@@ -286,7 +286,9 @@ pub enum ExamineAction {
     Torture,
     OpenDoor,
     CloseDoor,
-    Sleep,
+    SleepBed,
+    SleepLeanTo,
+    SleepPitShelter,
     BreakWall,
 }
 

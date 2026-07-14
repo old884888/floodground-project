@@ -217,6 +217,18 @@ fn describe_entity(app: &App, e: Entity) -> Option<String> {
         EntityKind::WolfDen => {
             "一个散发着腥臭味的土坑——狼的巢穴。附近总有眼睛在暗处盯着你。".into()
         }
+        EntityKind::LeanTo => {
+            "几根长木棍斜搭在一起，铺着厚厚的树叶——这就是旧石器时代的家。挡风遮雨，漏光漏风，但总归是家。".into()
+        }
+        EntityKind::PitShelter => {
+            "半截在地下的庇护所。挖坑、搭架子、盖树叶——冬暖夏凉。唯一的问题是下雨天会塌。".into()
+        }
+        EntityKind::SmokingRack => {
+            "几根木棍绑成的架子。以后能烟熏肉——现在只能晒太阳。未来可期，肉还没来。".into()
+        }
+        EntityKind::Bramble => {
+            "一丛纠缠的荆棘藤，尖刺闪闪发亮。藤条是好东西——但得先说服它放手。".into()
+        }
         EntityKind::Campfire => {
             "一团不屈的火焰，是这该死的世界里唯一温暖的谎言。烧的是木柴，暖的是希望——虽然两者都不持久。".into()
         }

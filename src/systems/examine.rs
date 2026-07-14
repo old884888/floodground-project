@@ -1,6 +1,6 @@
 use crate::app::{App, ExamineAction, ExamineMenu, ExamineState};
 use crate::components::{
-    Bed, Boulder, BlocksMovement, BlocksVision, Bush, BushState, Captive, ContainerTag, Door, Hands, Pile, Position, Tree, Wall,
+    Bed, Boulder, BlocksMovement, BlocksVision, Bush, BushState, Captive, ContainerTag, Door, Hands, LeanTo, Pile, PitShelter, Position, Tree, Wall,
 };
 use crate::items::pile_at;
 
@@ -67,10 +67,13 @@ fn detect_menu(app: &App, x: i32, y: i32) -> ExamineMenu {
         }
     }
     for (e, pos) in app.world.query::<&Position>().with::<&Bed>().iter() {
-        if pos.x == x && pos.y == y {
-            let _ = e;
-            return ExamineMenu::Action(ExamineAction::Sleep);
-        }
+        if pos.x == x && pos.y == y { let _ = e; return ExamineMenu::Action(ExamineAction::SleepBed); }
+    }
+    for (e, pos) in app.world.query::<&Position>().with::<&LeanTo>().iter() {
+        if pos.x == x && pos.y == y { let _ = e; return ExamineMenu::Action(ExamineAction::SleepLeanTo); }
+    }
+    for (e, pos) in app.world.query::<&Position>().with::<&PitShelter>().iter() {
+        if pos.x == x && pos.y == y { let _ = e; return ExamineMenu::Action(ExamineAction::SleepPitShelter); }
     }
     for (e, pos) in app.world.query::<&Position>().with::<&ContainerTag>().iter() {
         if pos.x == x && pos.y == y {
@@ -222,7 +225,9 @@ pub fn action_label(action: ExamineAction) -> &'static str {
         ExamineAction::Torture => "刑讯",
         ExamineAction::OpenDoor => "开门",
         ExamineAction::CloseDoor => "关门",
-        ExamineAction::Sleep => "睡觉",
+        ExamineAction::SleepBed => "睡觉",
+        ExamineAction::SleepLeanTo => "睡觉",
+        ExamineAction::SleepPitShelter => "睡觉",
         ExamineAction::BreakWall => "砸墙",
     }
 }
@@ -236,14 +241,14 @@ pub fn action_to_lock(app: &mut App, action: ExamineAction) {
     let (px, py) = app.actor_pos();
     let dx = tx - px;
     let dy = ty - py;
-    if dx == 0 && dy == 0
-        && action != ExamineAction::Sleep {
-            app.push_log("你没法对自己这么做。".into());
-            close(app);
-            return;
-        }
+    let is_sleep = matches!(action, ExamineAction::SleepBed | ExamineAction::SleepLeanTo | ExamineAction::SleepPitShelter);
+    if dx == 0 && dy == 0 && !is_sleep {
+        app.push_log("你没法对自己这么做。".into());
+        close(app);
+        return;
+    }
     if dx.abs() > 1 || dy.abs() > 1 || dx.abs() + dy.abs() > 1 {
-        if dx == 0 && dy == 0 && action == ExamineAction::Sleep {
+        if dx == 0 && dy == 0 && is_sleep {
             // OK — sleeping at own tile
         } else {
             app.push_log("太远了。".into());
@@ -257,14 +262,24 @@ pub fn action_to_lock(app: &mut App, action: ExamineAction) {
             close(app);
             toggle_door(app, tx, ty);
         }
-        ExamineAction::Sleep => {
+        ExamineAction::SleepBed | ExamineAction::SleepLeanTo | ExamineAction::SleepPitShelter => {
             close(app);
+            let restore = match action {
+                ExamineAction::SleepBed => 50.0,
+                ExamineAction::SleepPitShelter => 35.0,
+                _ => 30.0,
+            };
             if let Some(actor) = app.actor() {
                 if let Ok(mut energy) = app.world.get::<&mut crate::components::Energy>(actor) {
-                    energy.value = (energy.value + 50.0).min(100.0);
+                    energy.value = (energy.value + restore).min(100.0);
                 }
             }
-            app.push_log("你躺下睡了一觉，精力恢复了不少。".into());
+            let msg = match action {
+                ExamineAction::SleepBed => "你往床上一倒——木板硬得像块石头，但比站着强。",
+                ExamineAction::SleepPitShelter => "你蜷进地坑里——耳边的风声小了。能听见自己的呼吸，这就够了。",
+                _ => "你钻进窝棚——树叶缝隙里漏着星光。粗糙，但管用。",
+            };
+            app.push_log(msg.into());
             app.force_step = true;
         }
         _ => {

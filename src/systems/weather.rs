@@ -3,7 +3,7 @@
 use rand::Rng;
 
 use crate::app::{App, Weather};
-use crate::components::{LightSource, Position, Wet};
+use crate::components::{LightSource, PitShelter, Position, Wet};
 use crate::events::GameEvent;
 
 /// 每 tick 推进天气计时器 + 潮湿/火源/闪电
@@ -34,6 +34,9 @@ pub fn update_weather(app: &mut App, rng: &mut impl Rng) {
 
     // ── 潮湿更新 ──
     update_wet(app);
+
+    // ── 地坑庇护所塌方 ──
+    collapse_pit_shelters(app, rng);
 
     // ── 户外火源熄灭 ──
     extinguish_fires(app, rng);
@@ -133,6 +136,47 @@ fn has_torch_in_hands(app: &App, entity: hecs::Entity) -> bool {
                 || h.right.is_some_and(|(k, _)| k == ItemKind::Torch)
         })
         .unwrap_or(false)
+}
+
+/// 地坑庇护所塌方：暴雨 3%/雷阵雨 5%，塌后变废墟+人在里头受伤
+fn collapse_pit_shelters(app: &mut App, rng: &mut impl Rng) {
+    let chance = match app.weather {
+        Weather::Heavy => 0.03,
+        Weather::Thunder => 0.05,
+        _ => return,
+    };
+
+    let mut to_collapse = Vec::new();
+    for (e, (pos, _)) in app.world.query::<(&Position, &PitShelter)>().iter() {
+        // 露天才有塌方风险（无屋顶保护）
+        if app.map.has_roof(pos.x, pos.y) { continue; }
+        if rng.gen_bool(chance) {
+            to_collapse.push((e, (pos.x, pos.y)));
+        }
+    }
+
+    for (entity, (px, py)) in to_collapse {
+        // 检查里面有没有人，先收集实体再处理（避免借用冲突）
+        let mut victims: Vec<hecs::Entity> = Vec::new();
+        if let Some(v) = app.spatial.by_tile.get(&(px, py)) {
+            for &e in v {
+                if e != entity && app.world.get::<&crate::components::Health>(e).is_ok() {
+                    victims.push(e);
+                }
+            }
+        }
+        for v in victims {
+            crate::systems::combat::apply_damage(app, v, rng.gen_range(10.0..20.0), (px, py));
+            let name = app.entity_label(v);
+            app.push_log(format!("地坑塌了！{}被埋在了泥土和树叶下面。", name));
+        }
+        // 移除地坑 + 掉材料
+        let _ = app.world.despawn(entity);
+        app.map.set_roof(px, py, false);
+        crate::items::place_item(app, px, py, crate::components::ItemKind::LongStick, rng.gen_range(1..=2));
+        crate::items::place_item(app, px, py, crate::components::ItemKind::Leaves, rng.gen_range(3..=8));
+        app.mark_spatial_dirty();
+    }
 }
 
 /// 户外火源（无屋顶覆盖的 LightSource）按天气概率熄灭

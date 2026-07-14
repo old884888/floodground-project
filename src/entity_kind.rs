@@ -36,6 +36,10 @@ pub enum EntityKind {
     CraftWip(usize, u32),         // 半成品（recipe_index, progress）
     StickTrap,                    // 尖刺陷阱
     WolfDen,                      // 狼巢穴
+    LeanTo,                       // 窝棚
+    PitShelter,                   // 地坑庇护所
+    SmokingRack,                  // 烟熏架
+    Bramble,                      // 荆棘藤
     Named(String),                // 兜底
 }
 
@@ -98,6 +102,20 @@ impl EntityKind {
         if app.world.get::<&WolfDen>(e).is_ok() {
             return EntityKind::WolfDen;
         }
+        if app.world.get::<&LeanTo>(e).is_ok() {
+            return EntityKind::LeanTo;
+        }
+        if app.world.get::<&PitShelter>(e).is_ok() {
+            return EntityKind::PitShelter;
+        }
+        if app.world.get::<&SmokingRack>(e).is_ok() {
+            return EntityKind::SmokingRack;
+        }
+        if let Ok(bush) = app.world.get::<&Bush>(e) {
+            if bush.yield_item == ItemKind::Vine {
+                return EntityKind::Bramble;
+            }
+        }
         if app.world.get::<&DirtRoad>(e).is_ok() {
             return EntityKind::DirtRoad;
         }
@@ -131,6 +149,9 @@ impl EntityKind {
             EntityKind::Floor => 5,
             EntityKind::StickTrap => 20,
             EntityKind::WolfDen => 25,
+            EntityKind::LeanTo | EntityKind::PitShelter => 50,
+            EntityKind::SmokingRack => 30,
+            EntityKind::Bramble => 28,
             EntityKind::DirtRoad | EntityKind::StoneRoad => 4,
             EntityKind::Named(_) => 1,
         }
@@ -166,6 +187,10 @@ impl EntityKind {
             EntityKind::StoneRoad => ('·', Color::Rgb(150, 150, 150)),
             EntityKind::StickTrap => ('↓', Color::Rgb(180, 40, 40)),
             EntityKind::WolfDen => ('Ω', Color::Rgb(120, 60, 30)),
+            EntityKind::LeanTo => ('▲', Color::Rgb(120, 100, 50)),
+            EntityKind::PitShelter => ('▼', Color::Rgb(100, 80, 40)),
+            EntityKind::SmokingRack => ('╤', Color::Rgb(100, 70, 30)),
+            EntityKind::Bramble => ('&', Color::Rgb(100, 140, 40)),
             EntityKind::Pile(Some(item)) => crate::ui::item_glyph(*item),
             EntityKind::Pile(None) => ('.', Color::DarkGray),
             EntityKind::CraftWip(_, _) => ('…', Color::Yellow),

@@ -18,25 +18,23 @@ pub enum BuildTarget {
     WoodDoor,
     WoodRoof,
     StickTrap,
+    LeanTo,
+    PitShelter,
+    SmokingRack,
 }
 
 pub struct BuildRecipe {
     pub name: &'static str,
-    /// (材料, 数量)
     pub ingredients: &'static [(ItemKind, u32)],
     pub result: BuildTarget,
-    /// 基础制作进度（ticks）
     pub base_progress: u32,
-    /// 是否需要篝火邻格
     pub requires_fire: bool,
-    /// 最低光照等级
     pub min_light: u8,
-    /// 是否建在脚下（不需要选方向）
     pub self_target: bool,
-    /// 制作描述
     pub build_desc: &'static str,
-    /// 配方说明（浏览视图展示）
     pub desc: &'static str,
+    /// 需要手持的工具（None=不需要）
+    pub requires_tool: Option<ItemKind>,
 }
 
 pub static BUILD_RECIPES: &[BuildRecipe] = &[
@@ -50,6 +48,7 @@ pub static BUILD_RECIPES: &[BuildRecipe] = &[
         self_target: false,
         build_desc: "正在搭建木墙...",
         desc: "用劈好的木料搭一面墙。不结实，但总比没有强——至少狼得多撞几下。",
+        requires_tool: None,
     },
     BuildRecipe {
         name: "石墙",
@@ -61,6 +60,7 @@ pub static BUILD_RECIPES: &[BuildRecipe] = &[
         self_target: false,
         build_desc: "正在垒砌石墙...",
         desc: "垒石为墙。沉重、结实、让冬天闭嘴。虽然垒起来比木墙慢一倍。",
+        requires_tool: None,
     },
     BuildRecipe {
         name: "木门",
@@ -72,6 +72,7 @@ pub static BUILD_RECIPES: &[BuildRecipe] = &[
         self_target: false,
         build_desc: "正在拼装木门...",
         desc: "一扇吱嘎响的木门。进出自如——对你是，对狼也是。记得关门。",
+        requires_tool: None,
     },
     BuildRecipe {
         name: "木屋顶",
@@ -83,6 +84,7 @@ pub static BUILD_RECIPES: &[BuildRecipe] = &[
         self_target: true,
         build_desc: "正在铺设屋顶...",
         desc: "建在脚下的天花板。必须挨着墙或已有屋顶——悬空的顶不存在的。有了它才算室内。",
+        requires_tool: None,
     },
     BuildRecipe {
         name: "尖刺陷阱",
@@ -94,6 +96,44 @@ pub static BUILD_RECIPES: &[BuildRecipe] = &[
         self_target: false,
         build_desc: "正在削尖木棍布置陷阱...",
         desc: "削尖的木棍埋在浅坑里。踩上去不分敌我——你自己中招的那一刻最疼，也最好笑。",
+        requires_tool: None,
+    },
+    // ── Plan 08 建筑 ──
+    BuildRecipe {
+        name: "窝棚",
+        ingredients: &[(ItemKind::LongStick, 4), (ItemKind::Leaves, 20), (ItemKind::Vine, 3)],
+        result: BuildTarget::LeanTo,
+        base_progress: 800,
+        requires_fire: false,
+        min_light: 1,
+        self_target: false,
+        build_desc: "正在搭窝棚框架...",
+        desc: "长木棍支起来，树叶铺上去，藤条绑紧——能遮雨能睡觉。不如木屋，但比露天强一百倍。",
+        requires_tool: None,
+    },
+    BuildRecipe {
+        name: "地坑庇护所",
+        ingredients: &[(ItemKind::LongStick, 3), (ItemKind::Leaves, 15)],
+        result: BuildTarget::PitShelter,
+        base_progress: 1200,
+        requires_fire: false,
+        min_light: 1,
+        self_target: true,
+        build_desc: "正在挖掘地坑并搭建顶棚...",
+        desc: "挖一个坑，坑上搭架子盖树叶——保暖、结实，但雨天会塌。需要手持石铲或木铲。",
+        requires_tool: None, // 在 can_build 里单独检查铲子
+    },
+    BuildRecipe {
+        name: "烟熏架",
+        ingredients: &[(ItemKind::Stick, 5), (ItemKind::Vine, 2)],
+        result: BuildTarget::SmokingRack,
+        base_progress: 400,
+        requires_fire: false,
+        min_light: 1,
+        self_target: false,
+        build_desc: "正在搭烟熏架...",
+        desc: "几根木棍绑成的架子。以后能在这里熏肉——现在只是个空架子。岁月静好，肉还没来。",
+        requires_tool: None,
     },
 ];
 
@@ -309,6 +349,21 @@ pub fn can_build(app: &App, recipe_index: usize, target_x: i32, target_y: i32) -
         }
     }
 
+    // 配方工具需求
+    if let Some(tool) = recipe.requires_tool {
+        if !crate::systems::crafting::actor_has_item(app, tool) {
+            return BuildCheck::NeedTool;
+        }
+    }
+
+    // 地坑庇护所需铲子
+    if matches!(recipe.result, BuildTarget::PitShelter)
+        && !crate::systems::crafting::actor_has_item(app, ItemKind::StoneShovel)
+        && !crate::systems::crafting::actor_has_item(app, ItemKind::WoodShovel)
+    {
+        return BuildCheck::NeedShovel;
+    }
+
     BuildCheck::Ok
 }
 
@@ -321,7 +376,9 @@ pub enum BuildCheck {
     NoSupport,
     MissingMaterials,
     Invalid,
-    NoBuildTerrain, // 浅水不可建造
+    NoBuildTerrain,
+    NeedTool,       // 缺少手持工具
+    NeedShovel,     // 地坑庇护所需铲子
 }
 
 impl BuildCheck {
@@ -335,6 +392,8 @@ impl BuildCheck {
             BuildCheck::MissingMaterials => "材料不足",
             BuildCheck::Invalid => "无效",
             BuildCheck::NoBuildTerrain => "水里建不了",
+            BuildCheck::NeedTool => "缺少工具",
+            BuildCheck::NeedShovel => "需要铲子",
         }
     }
 }
@@ -397,7 +456,11 @@ pub fn start_build(app: &mut App, target_x: i32, target_y: i32, rng: &mut impl r
 
     // 开始进度——保持弹窗，切换到 Building 状态
     let actor = match app.actor() { Some(a) => a, None => return false };
-    let adjusted_total = (recipe.base_progress as f32 * terrain_progress_mult).round() as u32;
+    let shovel_mult = if matches!(recipe.result, BuildTarget::PitShelter)
+        && crate::systems::crafting::actor_has_item(app, ItemKind::WoodShovel)
+        && !crate::systems::crafting::actor_has_item(app, ItemKind::StoneShovel)
+    { 2000.0 / 1200.0 } else { 1.0 };
+    let adjusted_total = (recipe.base_progress as f32 * terrain_progress_mult * shovel_mult).round() as u32;
     let _ = app.world.insert_one(actor, Building {
         recipe_index,
         progress: 0,
@@ -542,6 +605,32 @@ pub fn update_building(app: &mut App) {
                 StickTrap { builder: actor },
             ));
             app.push_log("尖刺陷阱布置好了。记住你把它放哪了——踩上去可不分敌我。".into());
+        }
+        BuildTarget::LeanTo => {
+            app.world.spawn((
+                Position { x: tx, y: ty },
+                LeanTo, BlocksMovement,
+                Harvestable { hp: 150.0, max_hp: 150.0, yield_item: ItemKind::LongStick, yield_hp_step: 50.0 },
+            ));
+            app.map.set_roof(tx, ty, true);
+            app.push_log("窝棚搭好了。能遮雨，能睡觉——旧石器时代的五星级酒店。".into());
+        }
+        BuildTarget::PitShelter => {
+            app.world.spawn((
+                Position { x: tx, y: ty },
+                PitShelter, BlocksMovement,
+                Harvestable { hp: 250.0, max_hp: 250.0, yield_item: ItemKind::LongStick, yield_hp_step: 83.0 },
+            ));
+            app.map.set_roof(tx, ty, true);
+            app.push_log("地坑庇护所挖好了——半截在地下，暖和。下雨天祈祷别塌就行。".into());
+        }
+        BuildTarget::SmokingRack => {
+            app.world.spawn((
+                Position { x: tx, y: ty },
+                SmokingRack,
+                Harvestable { hp: 100.0, max_hp: 100.0, yield_item: ItemKind::Stick, yield_hp_step: 50.0 },
+            ));
+            app.push_log("烟熏架搭好了。以后留着熏肉——现在嘛，只是个木架子。".into());
         }
     }
     app.rebuild_spatial_index();
