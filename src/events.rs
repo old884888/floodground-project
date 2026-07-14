@@ -68,6 +68,10 @@ pub enum GameEvent {
         pos: (i32, i32),
     },
     LightningFlash,
+    // Plan 09
+    StatusEffectAdded { entity: Entity, kind: crate::components::EffectKind },
+    StatusEffectRemoved { entity: Entity, kind: crate::components::EffectKind },
+    PuddleEvaporated { x: i32, y: i32 },
 }
 
 /// 导入路径简洁：事件里引用 app 的 Weather

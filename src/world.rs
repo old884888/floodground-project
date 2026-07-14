@@ -89,6 +89,7 @@ fn spawn_table(terrain: TerrainKind) -> &'static [(PropKind, f32)] {
     static HILL: &[(PropKind, f32)] = &[(Boulder, 0.10), (MetalVein, 0.03)];
     static SHALLOW_MARSH: &[(PropKind, f32)] = &[(Reed, 0.10), (PoisonMush, 0.03), (Bramble, 0.03)];
     static SHALLOW_WATER: &[(PropKind, f32)] = &[];
+    static STREAM: &[(PropKind, f32)] = &[];
     static SAND: &[(PropKind, f32)] = &[(Boulder, 0.03)];
     static WATER: &[(PropKind, f32)] = &[];
     static DIRT: &[(PropKind, f32)] = &[];
@@ -99,6 +100,7 @@ fn spawn_table(terrain: TerrainKind) -> &'static [(PropKind, f32)] {
         TerrainKind::Hill => HILL,
         TerrainKind::ShallowMarsh => SHALLOW_MARSH,
         TerrainKind::ShallowWater => SHALLOW_WATER,
+        TerrainKind::Stream => STREAM,
         TerrainKind::Sand => SAND,
         TerrainKind::Water => WATER,
         TerrainKind::Dirt => DIRT,
@@ -115,6 +117,7 @@ impl GameMap {
             TerrainKind::Hill,
             TerrainKind::ShallowMarsh,
             TerrainKind::ShallowWater,
+            TerrainKind::Stream,
             TerrainKind::Sand,
             TerrainKind::Water,
             TerrainKind::Dirt,
@@ -172,8 +175,31 @@ impl GameMap {
             }
         }
         if water_deepened > 0 {
-            // 日志在 App 初始化后 push，这里只做转换计数（调试用）
             let _ = water_deepened;
+        }
+
+        // ── 溪流：浅水区边缘 15% 转 Stream ──
+        for y in 1..MAP_HEIGHT - 1 {
+            for x in 1..MAP_WIDTH - 1 {
+                let idx = (y * MAP_WIDTH + x) as usize;
+                if terrain_grid[idx] != TerrainKind::ShallowWater {
+                    continue;
+                }
+                // 至少一个邻格不是水 → 边缘格
+                let has_nonwater = [
+                    ((y - 1) * MAP_WIDTH + x) as usize,
+                    ((y + 1) * MAP_WIDTH + x) as usize,
+                    (y * MAP_WIDTH + (x - 1)) as usize,
+                    (y * MAP_WIDTH + (x + 1)) as usize,
+                ].iter().any(|&ni| {
+                    terrain_grid[ni] != TerrainKind::ShallowWater
+                        && terrain_grid[ni] != TerrainKind::Water
+                        && terrain_grid[ni] != TerrainKind::Stream
+                });
+                if has_nonwater && rng.gen_bool(0.15) {
+                    terrain_grid[idx] = TerrainKind::Stream;
+                }
+            }
         }
 
         // ── 根据地形查表建 Tile ──
@@ -401,6 +427,7 @@ mod tests {
             TerrainKind::Hill,
             TerrainKind::ShallowMarsh,
             TerrainKind::ShallowWater,
+            TerrainKind::Stream,
             TerrainKind::Sand,
             TerrainKind::Water,
             TerrainKind::Dirt,

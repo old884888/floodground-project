@@ -1,5 +1,5 @@
 use crate::app::App;
-use crate::components::TerrainKind;
+use crate::components::{EffectKind, TerrainKind};
 use crate::events::GameEvent;
 
 pub fn format_event(app: &mut App, event: &GameEvent) -> Option<String> {
@@ -63,6 +63,18 @@ pub fn format_event(app: &mut App, event: &GameEvent) -> Option<String> {
         GameEvent::ActorDied { entity, cause } => {
             let name = entity_name(app, *entity);
             Some(format!("{}死了——{}。", name, cause))
+        }
+        GameEvent::StatusEffectAdded { entity, kind } => {
+            if Some(*entity) != app.actor() { return None; }
+            match kind {
+                EffectKind::Diarrhea => Some("肚子一阵绞痛——那水不对劲。".into()),
+            }
+        }
+        GameEvent::StatusEffectRemoved { entity, kind } => {
+            if Some(*entity) != app.actor() { return None; }
+            match kind {
+                EffectKind::Diarrhea => Some("肚子终于消停了。".into()),
+            }
         }
         // Torture / Mood / Move 已在对应 system 里直接打日志，避免重复
         _ => None,

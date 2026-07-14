@@ -11,6 +11,7 @@
         vis_flat: 0,
         rain_shield: 0.0,
         auto_wet: false,
+        diarrhea_chance: 0.0,
     ),
     "light_forest": (
         display_name: "疏林",
@@ -24,6 +25,7 @@
         vis_flat: 0,
         rain_shield: 0.30,
         auto_wet: false,
+        diarrhea_chance: 0.0,
     ),
     "dense_forest": (
         display_name: "密林",
@@ -37,6 +39,7 @@
         vis_flat: 0,
         rain_shield: 0.60,
         auto_wet: false,
+        diarrhea_chance: 0.0,
     ),
     "hill": (
         display_name: "丘陵",
@@ -50,6 +53,7 @@
         vis_flat: 3,
         rain_shield: 0.0,
         auto_wet: false,
+        diarrhea_chance: 0.0,
     ),
     "shallow_marsh": (
         display_name: "浅沼",
@@ -63,6 +67,7 @@
         vis_flat: 0,
         rain_shield: 0.0,
         auto_wet: true,
+        diarrhea_chance: 0.0,
     ),
     "shallow_water": (
         display_name: "浅水",
@@ -76,6 +81,21 @@
         vis_flat: 0,
         rain_shield: 0.0,
         auto_wet: true,
+        diarrhea_chance: 0.08,
+    ),
+    "stream": (
+        display_name: "溪流",
+        symbol: "≈",
+        color_fg: (60, 140, 220),
+        color_bg: (0, 15, 40),
+        is_walkable: true,
+        blocks_vision: false,
+        move_cost: 0.45,
+        vis_mod: 1.0,
+        vis_flat: 0,
+        rain_shield: 0.0,
+        auto_wet: true,
+        diarrhea_chance: 0.01,
     ),
     "sand": (
         display_name: "沙地",
@@ -89,6 +109,7 @@
         vis_flat: 5,
         rain_shield: 0.0,
         auto_wet: false,
+        diarrhea_chance: 0.0,
     ),
     "water": (
         display_name: "深水",
@@ -102,6 +123,7 @@
         vis_flat: 0,
         rain_shield: 0.0,
         auto_wet: true,
+        diarrhea_chance: 0.03,
     ),
     "dirt": (
         display_name: "泥土",
@@ -115,5 +137,6 @@
         vis_flat: 0,
         rain_shield: 0.0,
         auto_wet: false,
+        diarrhea_chance: 0.0,
     ),
 }

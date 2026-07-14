@@ -273,6 +273,7 @@ fn terrain_name(kind: crate::components::TerrainKind) -> &'static str {
         ShallowMarsh => "浅沼",
         ShallowWater => "浅水",
         Sand => "沙地",
+        Stream => "溪流",
         Water => "深水",
         Dirt => "泥土",
     }

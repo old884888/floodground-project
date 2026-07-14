@@ -1,7 +1,7 @@
 use crate::app::App;
-use crate::components::{Dead, Energy, Health, Hunger, Mood, Thirst, Wet};
+use crate::components::{BodyTemp, Dead, EffectKind, Energy, Health, Hunger, Mood, Position, StatusEffect, Thirst, Wet};
 
-/// 按「每天」速率：饥饿 -30/天，口渴 -35/天，精力 -40/天
+/// 需求衰减：饥饿/口渴/精力/体温/效果
 pub fn update_needs(app: &mut App) {
     let tpd = app.ticks_per_day.max(1) as f32;
     let hunger_per = 30.0 / tpd;
@@ -12,20 +12,22 @@ pub fn update_needs(app: &mut App) {
     let energy_mood = 8.0 / tpd;
     let starve_hp = 20.0 / tpd;
     let dehydrate_hp = 25.0 / tpd;
+    let diarrhea_mood = 10.0 / tpd;
 
-    // 先收集死人集合和潮湿值，避免在 query_mut 持有借用时再调 world.get
     let dead: std::collections::HashSet<hecs::Entity> = app
-        .world
-        .query::<&Dead>()
-        .iter()
-        .map(|(e, _)| e)
-        .collect();
+        .world.query::<&Dead>().iter().map(|(e, _)| e).collect();
 
     let wet_map: std::collections::HashMap<hecs::Entity, f32> = app
-        .world
-        .query::<&Wet>()
-        .iter()
-        .map(|(e, w)| (e, w.value))
+        .world.query::<&Wet>().iter().map(|(e, w)| (e, w.value)).collect();
+
+    // BodyTemp map
+    let temp_map: std::collections::HashMap<hecs::Entity, f32> = app
+        .world.query::<&BodyTemp>().iter().map(|(e, t)| (e, t.value)).collect();
+
+    // Effect 列表（腹泻等）
+    let effect_map: std::collections::HashMap<hecs::Entity, Vec<EffectKind>> = app
+        .world.query::<&Vec<StatusEffect>>().iter()
+        .map(|(e, v)| (e, v.iter().map(|s| s.kind).collect()))
         .collect();
 
     let weather_mood = app.weather.mood_penalty();
@@ -34,46 +36,48 @@ pub fn update_needs(app: &mut App) {
     let mut dehydrating: Vec<hecs::Entity> = Vec::new();
     let mut to_kill: Vec<(hecs::Entity, &'static str)> = Vec::new();
 
-    for (entity, (hunger, thirst, energy, mood, health, _name)) in app
-        .world
-        .query_mut::<(
-            &mut Hunger,
-            &mut Thirst,
-            &mut Energy,
-            &mut Mood,
-            &mut Health,
-            &crate::components::Name,
-        )>()
-    {
-        // 死人不再衰减
-        if dead.contains(&entity) {
-            continue;
-        }
+    for (entity, (hunger, thirst, energy, mood, health, _name)) in app.world.query_mut::<(
+        &mut Hunger, &mut Thirst, &mut Energy, &mut Mood, &mut Health, &crate::components::Name,
+    )>() {
+        if dead.contains(&entity) { continue; }
 
+        // ── 基础衰减 ──
         hunger.value -= hunger_per;
-        thirst.value -= thirst_per;
+        let mut thirst_mult: f32 = 1.0;
+        if effect_map.get(&entity).is_some_and(|v| v.contains(&EffectKind::Diarrhea)) {
+            thirst_mult = 1.5;
+        }
+        if temp_map.get(&entity).copied().unwrap_or(60.0) > 60.0 {
+            thirst_mult = thirst_mult.max(1.5);
+        }
+        thirst.value -= thirst_per * thirst_mult;
+
         let wet_val = wet_map.get(&entity).copied().unwrap_or(0.0);
         let wet_energy_mult = if wet_val > 80.0 { 1.0 } else if wet_val > 50.0 { 0.5 } else { 0.0 };
-        // 潮湿心情惩罚：按阈值分级，一旦湿透就不再累积
         let wet_mood = if wet_val > 80.0 { 15.0 } else if wet_val > 50.0 { 8.0 } else if wet_val > 20.0 { 3.0 } else { 0.0 };
 
-        energy.value -= energy_per * (1.0 + wet_energy_mult);
-        hunger.clamp();
-        thirst.clamp();
-        energy.clamp();
+        // ── 温度惩罚 ──
+        let temp = temp_map.get(&entity).copied().unwrap_or(60.0);
+        let (temp_energy_mult, temp_move_penalty) = if temp < 15.0 {
+            (1.0, true) // 失温：精力+100%
+        } else if temp < 30.0 {
+            (0.5, false) // 很冷：精力+50%
+        } else if temp < 45.0 {
+            (0.3, false) // 冷：精力+30%
+        } else {
+            (0.0, false) // 舒服/热：无精力惩罚
+        };
 
-        if hunger.value < 40.0 {
-            mood.value -= hunger_mood;
-        }
-        if thirst.value < 35.0 {
-            mood.value -= thirst_mood;
-        }
-        if energy.value < 20.0 {
-            mood.value -= energy_mood;
-        }
-        // 天气+潮湿心情 debuff：只在状态变化时调整差额，不重复累积
-        // 淋到"湿透的"扣 8 心情，继续淋不再扣——除非进入更高档
-        let target_debuff = weather_mood + wet_mood;
+        energy.value -= energy_per * (1.0 + wet_energy_mult + temp_energy_mult);
+        hunger.clamp(); thirst.clamp(); energy.clamp();
+
+        // ── 心情综合 ──
+        if hunger.value < 40.0 { mood.value -= hunger_mood; }
+        if thirst.value < 35.0 { mood.value -= thirst_mood; }
+        if energy.value < 20.0 { mood.value -= energy_mood; }
+
+        let target_debuff = weather_mood + wet_mood
+            + if effect_map.get(&entity).is_some_and(|v| v.contains(&EffectKind::Diarrhea)) { diarrhea_mood } else { 0.0 };
         let prev = app.weather_mood_tracker.get(&entity).copied().unwrap_or(0.0);
         let delta = target_debuff - prev;
         if delta != 0.0 {
@@ -82,42 +86,68 @@ pub fn update_needs(app: &mut App) {
         }
         mood.clamp();
 
+        // ── 失温扣血 ──
+        if temp < 15.0 && app.tick.is_multiple_of(50) {
+            health.hp -= 1.0;
+        }
+        if temp <= 0.0 && app.tick.is_multiple_of(50) {
+            health.hp -= 2.0;
+        }
+
         if hunger.value <= 0.0 {
-            health.hp -= starve_hp;
-            starving.push(entity);
+            health.hp -= starve_hp; starving.push(entity);
         }
         if thirst.value <= 0.0 {
-            health.hp -= dehydrate_hp;
-            dehydrating.push(entity);
+            health.hp -= dehydrate_hp; dehydrating.push(entity);
         }
 
         if health.hp <= 0.0 {
-            let cause = if hunger.value <= 0.0 && thirst.value <= 0.0 {
-                "饥渴交迫"
-            } else if hunger.value <= 0.0 {
-                "饿死"
-            } else {
-                "渴死"
-            };
+            let cause = if temp <= 0.0 { "冻死" }
+            else if hunger.value <= 0.0 && thirst.value <= 0.0 { "饥渴交迫" }
+            else if hunger.value <= 0.0 { "饿死" }
+            else { "渴死" };
             to_kill.push((entity, cause));
         }
+
+        let _ = temp_move_penalty; // 移速惩罚在 movement.rs 读 BodyTemp
     }
 
-    // 统一调用 kill
-    for (entity, cause) in to_kill {
-        app.kill(entity, cause);
+    // ── BodyTemp 趋近 ──
+    for (e, (pos, temp)) in app.world.query::<(&Position, &mut BodyTemp)>().iter() {
+        if dead.contains(&e) { continue; }
+        let wet = wet_map.get(&e).copied().unwrap_or(0.0);
+        let env = app.env_temperature(pos.x, pos.y, wet);
+        let diff = env - temp.value;
+        temp.value = (temp.value + diff * 0.3).clamp(0.0, 100.0);
     }
 
+    // ── StatusEffect 递减 ──
+    let mut expired: Vec<(hecs::Entity, EffectKind)> = Vec::new();
+    for (e, effects) in app.world.query::<&mut Vec<StatusEffect>>().iter() {
+        effects.retain_mut(|eff| {
+            eff.remaining = eff.remaining.saturating_sub(1);
+            if eff.remaining == 0 {
+                expired.push((e, eff.kind));
+                false
+            } else {
+                true
+            }
+        });
+    }
+    for (entity, kind) in expired {
+        app.events.push(crate::events::GameEvent::StatusEffectRemoved { entity, kind });
+    }
+
+    // ── kill ──
+    for (entity, cause) in to_kill { app.kill(entity, cause); }
     for &entity in &starving {
         if app.tick.is_multiple_of(100) && app.can_see_entity(entity) {
-            let label = app.entity_label(entity);
-            app.push_log(format!("{}饿得眼前发黑。", label));
+            app.push_log(format!("{}饿得眼前发黑。", app.entity_label(entity)));
         }
     }
     for &entity in &dehydrating {
         if app.tick.is_multiple_of(100) && app.can_see_entity(entity) {
-            let label = app.entity_label(entity);
-            app.push_log(format!("{}口干舌裂。", label));
+            app.push_log(format!("{}口干舌裂。", app.entity_label(entity)));
         }
     }
 }

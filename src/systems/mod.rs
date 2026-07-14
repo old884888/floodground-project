@@ -109,6 +109,7 @@ pub fn run_tick(app: &mut App, rng: &mut impl rand::Rng) {
     nature::update_bushes(app);
     terrain_gen::update_wolf_dens(app, rng);
     combat::tick_visual_effects(app);
+    tick_puddles(app, rng);
 
     check_action_lock(app);
 
@@ -134,6 +135,23 @@ pub fn ticks_this_frame(speed: Speed) -> u32 {
 
 use crate::app::ExamineAction;
 use crate::components::{Boulder, Bush, BushState, Captive, Dead, Position, Tree, Wall};
+
+/// Puddle 蒸发：每 tick 5%，天气晴/阴加速到 10%
+fn tick_puddles(app: &mut App, rng: &mut impl rand::Rng) {
+    use crate::app::Weather;
+    let chance = if matches!(app.weather, Weather::Clear | Weather::Overcast) { 0.10 } else { 0.05 };
+    let mut to_kill: Vec<hecs::Entity> = Vec::new();
+    for (e, (pos, _)) in app.world.query::<(&crate::components::Position, &crate::components::Puddle)>().iter() {
+        if rng.gen_bool(chance) {
+            to_kill.push(e);
+            app.events.push(crate::events::GameEvent::PuddleEvaporated { x: pos.x, y: pos.y });
+        }
+    }
+    for e in to_kill {
+        let _ = app.world.despawn(e);
+        app.mark_spatial_dirty();
+    }
+}
 
 fn check_action_lock(app: &mut App) {
     let Some((tx, ty, action, _, _)) = app.action_lock else {

@@ -1,6 +1,8 @@
+use rand::Rng;
+
 use crate::app::{App, ExamineAction, ExamineMenu, ExamineState};
 use crate::components::{
-    Bed, Boulder, BlocksMovement, BlocksVision, Bush, BushState, Captive, ContainerTag, Door, Hands, LeanTo, Pile, PitShelter, Position, Tree, Wall,
+    Bed, Boulder, BlocksMovement, BlocksVision, Bush, BushState, Captive, ContainerTag, Door, Hands, LeanTo, Pile, PitShelter, Position, StatusEffect, TerrainKind, Thirst, Tree, Wall,
 };
 use crate::items::pile_at;
 
@@ -74,6 +76,15 @@ fn detect_menu(app: &App, x: i32, y: i32) -> ExamineMenu {
     }
     for (e, pos) in app.world.query::<&Position>().with::<&PitShelter>().iter() {
         if pos.x == x && pos.y == y { let _ = e; return ExamineMenu::Action(ExamineAction::SleepPitShelter); }
+    }
+    // 水源：可以喝水
+    if app.map.in_bounds(x, y) {
+        let terrain = app.map.terrain(x, y);
+        if matches!(terrain, TerrainKind::ShallowWater | TerrainKind::Water | TerrainKind::Stream)
+            || app.world.query::<&Position>().with::<&crate::components::Puddle>().iter().any(|(_, p)| p.x == x && p.y == y)
+        {
+            return ExamineMenu::Action(ExamineAction::Drink);
+        }
     }
     for (e, pos) in app.world.query::<&Position>().with::<&ContainerTag>().iter() {
         if pos.x == x && pos.y == y {
@@ -229,6 +240,7 @@ pub fn action_label(action: ExamineAction) -> &'static str {
         ExamineAction::SleepLeanTo => "睡觉",
         ExamineAction::SleepPitShelter => "睡觉",
         ExamineAction::BreakWall => "砸墙",
+        ExamineAction::Drink => "喝水",
     }
 }
 
@@ -242,14 +254,15 @@ pub fn action_to_lock(app: &mut App, action: ExamineAction) {
     let dx = tx - px;
     let dy = ty - py;
     let is_sleep = matches!(action, ExamineAction::SleepBed | ExamineAction::SleepLeanTo | ExamineAction::SleepPitShelter);
-    if dx == 0 && dy == 0 && !is_sleep {
+    let is_drink = matches!(action, ExamineAction::Drink);
+    if dx == 0 && dy == 0 && !is_sleep && !is_drink {
         app.push_log("你没法对自己这么做。".into());
         close(app);
         return;
     }
     if dx.abs() > 1 || dy.abs() > 1 || dx.abs() + dy.abs() > 1 {
-        if dx == 0 && dy == 0 && is_sleep {
-            // OK — sleeping at own tile
+        if (dx == 0 && dy == 0 && is_sleep) || is_drink {
+            // OK — sleeping/drinking at own or adjacent tile
         } else {
             app.push_log("太远了。".into());
             close(app);
@@ -280,6 +293,43 @@ pub fn action_to_lock(app: &mut App, action: ExamineAction) {
                 _ => "你钻进窝棚——树叶缝隙里漏着星光。粗糙，但管用。",
             };
             app.push_log(msg.into());
+            app.force_step = true;
+        }
+        ExamineAction::Drink => {
+            close(app);
+            let mut rng = rand::thread_rng();
+            let terrain = app.map.terrain(tx, ty);
+            let diarrhea_chance = crate::data::terrain_def(terrain.key()).diarrhea_chance;
+            // 水洼覆盖（Puddle 实体）
+            let on_puddle = app.world.query::<&Position>().with::<&crate::components::Puddle>().iter()
+                .any(|(_, p)| p.x == tx && p.y == ty);
+            let chance = if on_puddle { 0.15 } else { diarrhea_chance };
+            let restore = rng.gen_range(20.0..40.0);
+
+            if let Some(actor) = app.actor() {
+                if let Ok(mut thirst) = app.world.get::<&mut Thirst>(actor) {
+                    thirst.value = (thirst.value + restore).min(100.0);
+                }
+            }
+            let msg = if on_puddle { "你趴在水洼边猛灌了几口泥水——你会后悔的。大概。" }
+            else if terrain == TerrainKind::Stream { "溪水流过石头，凉得牙根发酸。" }
+            else if terrain == TerrainKind::Water { "湖心的水清澈些——也可能是错觉。" }
+            else { "你趴在水边猛灌了几口——有点腥，但管用。" };
+            app.push_log(msg.into());
+
+            if rng.gen_bool(chance as f64) {
+                if let Some(actor) = app.actor() {
+                    let duration = rng.gen_range(6000..=18000);
+                    if let Ok(mut effects) = app.world.get::<&mut Vec<StatusEffect>>(actor) {
+                        effects.push(StatusEffect { kind: crate::components::EffectKind::Diarrhea, remaining: duration });
+                    }
+                    app.events.push(crate::events::GameEvent::StatusEffectAdded {
+                        entity: actor,
+                        kind: crate::components::EffectKind::Diarrhea,
+                    });
+                }
+                app.push_log("肚子一阵绞痛——那水不对劲。".into());
+            }
             app.force_step = true;
         }
         _ => {

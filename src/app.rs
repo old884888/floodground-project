@@ -290,6 +290,7 @@ pub enum ExamineAction {
     SleepLeanTo,
     SleepPitShelter,
     BreakWall,
+    Drink,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -531,6 +532,8 @@ impl App {
             TraitTag(trait_tag),
             Wet { value: 0.0 },
             MoveCooldown { ticks: 0 },
+            BodyTemp { value: 60.0 },
+            Vec::<StatusEffect>::new(),
         ));
 
         let _c1 = world.spawn((
@@ -568,6 +571,8 @@ impl App {
             ),
             Wet { value: 0.0 },
             MoveCooldown { ticks: 0 },
+            BodyTemp { value: 60.0 },
+            Vec::<StatusEffect>::new(),
         ));
 
         let _c2 = world.spawn((
@@ -605,6 +610,8 @@ impl App {
             ),
             Wet { value: 0.0 },
             MoveCooldown { ticks: 0 },
+            BodyTemp { value: 60.0 },
+            Vec::<StatusEffect>::new(),
         ));
 
         let _captive = world.spawn((
@@ -624,6 +631,8 @@ impl App {
             Mood { value: 20.0 },
             Wet { value: 0.0 },
             MoveCooldown { ticks: 0 },
+            BodyTemp { value: 60.0 },
+            Vec::<StatusEffect>::new(),
         ));
 
         // 营区篝火：夜晚的家
@@ -847,6 +856,30 @@ impl App {
         let def = crate::data::terrain_def(terrain.key());
         let multiplied = base * self.weather.visibility_multiplier() * def.vis_mod;
         (multiplied + def.vis_flat as f32).max(1.0) as i32
+    }
+
+    /// 环境温度：50 基准 + 天气 + 湿身 + 火源 + 室内
+    pub fn env_temperature(&self, x: i32, y: i32, wet_value: f32) -> f32 {
+        let day = (0.25..0.80).contains(&self.day_progress());
+        let weather = self.weather;
+        let base = match (weather, day) {
+            (Weather::Clear, true) => 20.0, (Weather::Clear, false) => -8.0,
+            (Weather::Overcast, true) => 10.0, (Weather::Overcast, false) => -12.0,
+            (Weather::Drizzle, true) => 5.0, (Weather::Drizzle, false) => -10.0,
+            (Weather::Rain, true) => -5.0, (Weather::Rain, false) => -15.0,
+            (Weather::Heavy, true) => -10.0, (Weather::Heavy, false) => -18.0,
+            (Weather::Thunder, true) => -8.0, (Weather::Thunder, false) => -18.0,
+        };
+        let wet_penalty = if wet_value > 80.0 { -10.0 } else if wet_value > 50.0 { -5.0 } else { 0.0 };
+        let fire_bonus = if self.has_fire_adjacent(x, y) { 25.0 } else { 0.0 };
+        let torch_bonus = self.actor().and_then(|a| self.world.get::<&crate::components::Hands>(a).ok())
+            .map(|h| {
+                let has = h.left.is_some_and(|(k,_)| k == crate::components::ItemKind::Torch)
+                    || h.right.is_some_and(|(k,_)| k == crate::components::ItemKind::Torch);
+                if has { 8.0 } else { 0.0 }
+            }).unwrap_or(0.0);
+        let roof_bonus = if self.map.has_roof(x, y) { 10.0 } else { 0.0 };
+        ((50.0f64 + base + wet_penalty + fire_bonus + torch_bonus + roof_bonus).clamp(0.0, 100.0)) as f32
     }
 
     /// 天气颜色乘数暴露给 map_view

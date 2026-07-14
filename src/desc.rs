@@ -282,6 +282,7 @@ fn describe_terrain(kind: TerrainKind) -> &'static str {
         TerrainKind::ShallowMarsh => "泥水浸过你的鞋底。每一步都在吮吸——这地方在尝试吞掉你。",
         TerrainKind::ShallowWater => "浅水没过脚踝。涉水前行，裤脚已经湿透——但至少还站得稳。",
         TerrainKind::Sand => "松软的沙地让每一步都打滑。脚印留不了多久——风会替你抹掉。",
+        TerrainKind::Stream => "溪水流过石头，凉得牙根发酸。流动的水总是比死水靠谱——至少看起来是。",
         TerrainKind::Water => "深水区。你不会游泳——或者说，你想试试吗？",
         TerrainKind::Dirt => "踩实的泥土，营地的味道。说不上好闻，但至少熟悉。",
     }

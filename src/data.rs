@@ -39,6 +39,8 @@ pub struct TerrainDef {
     pub rain_shield: f32,
     /// 站在上面是否持续获得潮湿
     pub auto_wet: bool,
+    /// 直接喝水的腹泻概率（0.0-1.0），非水源=0
+    pub diarrhea_chance: f32,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -102,6 +104,7 @@ pub fn terrain_def(key: &str) -> &TerrainDef {
                 vis_flat: 0,
                 rain_shield: 0.0,
                 auto_wet: false,
+                diarrhea_chance: 0.0,
             })
         })
 }

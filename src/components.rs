@@ -81,6 +81,7 @@ pub enum TerrainKind {
     Hill,
     ShallowMarsh,
     ShallowWater,
+    Stream,
     Sand,
     Water,
     Dirt,
@@ -96,6 +97,7 @@ impl TerrainKind {
             TerrainKind::Hill => "hill",
             TerrainKind::ShallowMarsh => "shallow_marsh",
             TerrainKind::ShallowWater => "shallow_water",
+            TerrainKind::Stream => "stream",
             TerrainKind::Sand => "sand",
             TerrainKind::Water => "water",
             TerrainKind::Dirt => "dirt",
@@ -111,6 +113,7 @@ impl TerrainKind {
             "hill" => TerrainKind::Hill,
             "shallow_marsh" => TerrainKind::ShallowMarsh,
             "shallow_water" => TerrainKind::ShallowWater,
+            "stream" => TerrainKind::Stream,
             "sand" => TerrainKind::Sand,
             "water" => TerrainKind::Water,
             "dirt" => TerrainKind::Dirt,
@@ -123,6 +126,7 @@ impl TerrainKind {
         match self {
             TerrainKind::ShallowMarsh => 0.05,
             TerrainKind::ShallowWater => 0.08,
+            TerrainKind::Stream => 0.06,
             TerrainKind::Water => 0.10,
             _ => 0.0,
         }
@@ -600,6 +604,35 @@ impl Captive {
 pub struct Wet {
     pub value: f32,
 }
+
+// ── Plan 09 温度 + 效果系统 ──
+
+/// 体温：0-100, 50=最舒适。每 tick 向环境温度趋近。
+#[derive(Debug, Clone, Copy)]
+pub struct BodyTemp {
+    pub value: f32,
+}
+
+/// 持续效果种类
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EffectKind {
+    Diarrhea,   // 腹泻：口渴×1.5, 心情−10
+    // 预留：
+    // Bleeding,
+    // Infection,
+    // Poison,
+}
+
+/// 持续效果：挂在角色身上，每 tick 递减 remaining，归零自动移除
+#[derive(Debug, Clone)]
+pub struct StatusEffect {
+    pub kind: EffectKind,
+    pub remaining: u32,
+}
+
+/// 雨后水洼：临时实体，到时蒸发
+#[derive(Debug, Clone, Copy)]
+pub struct Puddle;
 
 impl Wet {
     #[allow(dead_code)]

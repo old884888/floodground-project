@@ -35,6 +35,9 @@ pub fn update_weather(app: &mut App, rng: &mut impl Rng) {
     // ── 潮湿更新 ──
     update_wet(app);
 
+    // ── 水洼生成 ──
+    spawn_puddles(app, rng);
+
     // ── 地坑庇护所塌方 ──
     collapse_pit_shelters(app, rng);
 
@@ -136,6 +139,32 @@ fn has_torch_in_hands(app: &App, entity: hecs::Entity) -> bool {
                 || h.right.is_some_and(|(k, _)| k == ItemKind::Torch)
         })
         .unwrap_or(false)
+}
+
+/// 雨后水洼：暴雨 10%/雷阵雨 5% 在浅沼上生成，全图最多 20 个
+fn spawn_puddles(app: &mut App, rng: &mut impl Rng) {
+    use crate::components::{Puddle, TerrainKind};
+    let chance = match app.weather {
+        Weather::Heavy => 0.10,
+        Weather::Thunder => 0.05,
+        _ => return,
+    };
+    let puddle_count = app.world.query::<&Puddle>().iter().count();
+    if puddle_count >= 20 { return; }
+    // 随机找浅沼格
+    for _ in 0..50 {
+        if app.world.query::<&Puddle>().iter().count() >= 20 { break; }
+        let x = rng.gen_range(0..500);
+        let y = rng.gen_range(0..500);
+        if app.map.terrain(x, y) == TerrainKind::ShallowMarsh
+            && app.map.is_walkable(x, y)
+            && !app.is_blocked(x, y)
+            && rng.gen_bool(chance)
+        {
+            app.world.spawn((Position { x, y }, Puddle));
+            app.mark_spatial_dirty();
+        }
+    }
 }
 
 /// 地坑庇护所塌方：暴雨 3%/雷阵雨 5%，塌后变废墟+人在里头受伤
