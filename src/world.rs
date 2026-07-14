@@ -42,6 +42,8 @@ pub enum PropKind {
     SmallStone,
     Reed,
     PoisonMush,
+    HerbPlant,
+    Bramble,
     MetalVein,
     WolfDen,
 }
@@ -82,10 +84,10 @@ fn terrain_from_noise(n: f64) -> TerrainKind {
 fn spawn_table(terrain: TerrainKind) -> &'static [(PropKind, f32)] {
     use PropKind::*;
     static GRASS: &[(PropKind, f32)] = &[(Bush, 0.08)];
-    static LIGHT_FOREST: &[(PropKind, f32)] = &[(Tree, 0.12), (Bush, 0.05)];
-    static DENSE_FOREST: &[(PropKind, f32)] = &[(Tree, 0.20), (Bush, 0.08), (WolfDen, 0.01), (PoisonMush, 0.02)];
+    static LIGHT_FOREST: &[(PropKind, f32)] = &[(Tree, 0.12), (Bush, 0.05), (HerbPlant, 0.03), (Bramble, 0.02)];
+    static DENSE_FOREST: &[(PropKind, f32)] = &[(Tree, 0.20), (Bush, 0.08), (HerbPlant, 0.05), (Bramble, 0.05), (WolfDen, 0.01), (PoisonMush, 0.02)];
     static HILL: &[(PropKind, f32)] = &[(Boulder, 0.10), (MetalVein, 0.03)];
-    static SHALLOW_MARSH: &[(PropKind, f32)] = &[(Reed, 0.10), (PoisonMush, 0.03)];
+    static SHALLOW_MARSH: &[(PropKind, f32)] = &[(Reed, 0.10), (PoisonMush, 0.03), (Bramble, 0.03)];
     static SHALLOW_WATER: &[(PropKind, f32)] = &[];
     static SAND: &[(PropKind, f32)] = &[(Boulder, 0.03)];
     static WATER: &[(PropKind, f32)] = &[];

@@ -682,6 +682,25 @@ fn debug_spawn_terrain_item(app: &mut App, idx: usize) {
             app.push_log("（调试）脚下刷了 3 朵毒蘑菇。".into());
         }
         4 => {
+            // 面前放草药植株
+            let tx = px + app.facing.0;
+            let ty = py + app.facing.1;
+            if app.map.is_walkable(tx, ty) && !app.is_blocked(tx, ty) {
+                app.world.spawn((
+                    Position { x: tx, y: ty },
+                    crate::components::Bush {
+                        state: crate::components::BushState::Fruiting,
+                        growth_timer: 0,
+                        yield_item: ItemKind::Herb,
+                    },
+                ));
+                app.mark_spatial_dirty();
+                app.push_log("（调试）面前长了一株草药。".into());
+            } else {
+                app.push_log("（调试）面前没空地。".into());
+            }
+        }
+        5 => {
             // 面前放狼巢穴
             let tx = px + app.facing.0;
             let ty = py + app.facing.1;
@@ -696,6 +715,15 @@ fn debug_spawn_terrain_item(app: &mut App, idx: usize) {
                 app.push_log("（调试）面前没空地放巢穴。".into());
             }
         }
+        // Plan 08 新物品
+        6 => { place_item(app, px, py, ItemKind::Branch, 5); app.push_log("（调试）脚下刷了 5 根树枝。".into()); }
+        7 => { place_item(app, px, py, ItemKind::Leaves, 5); app.push_log("（调试）脚下刷了 5 片树叶。".into()); }
+        8 => { place_item(app, px, py, ItemKind::LongStick, 3); app.push_log("（调试）脚下刷了 3 根长木棍。".into()); }
+        9 => { place_item(app, px, py, ItemKind::Vine, 3); app.push_log("（调试）脚下刷了 3 根藤条。".into()); }
+        10 => { place_item(app, px, py, ItemKind::Rope, 3); app.push_log("（调试）脚下刷了 3 根绳子。".into()); }
+        11 => { place_item(app, px, py, ItemKind::SmallFlake, 5); app.push_log("（调试）脚下刷了 5 片石片。".into()); }
+        12 => { place_item(app, px, py, ItemKind::LargeFlake, 3); app.push_log("（调试）脚下刷了 3 片大石片。".into()); }
+        13 => { place_item(app, px, py, ItemKind::Bone, 3); app.push_log("（调试）脚下刷了 3 根骨头。".into()); }
         _ => {}
     }
 }

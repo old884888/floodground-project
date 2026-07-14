@@ -100,7 +100,7 @@ pub fn run_tick(app: &mut App, rng: &mut impl rand::Rng) {
 
     weather::update_weather(app, rng);
     needs::update_needs(app);
-    crafting::update_crafting(app);
+    crafting::update_crafting(app, rng);
     building::update_building(app);
     ai::update_ai(app, rng);
     if player_alive {

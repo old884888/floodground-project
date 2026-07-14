@@ -6,13 +6,48 @@ use crate::components::{
 };
 use crate::events::GameEvent;
 use crate::items::drop_item_near;
+use crate::systems::combat::apply_damage;
+use crate::systems::crafting::actor_has_item;
 
 pub fn try_chop(app: &mut App, rng: &mut impl Rng) {
     hit_harvestable(app, rng, TargetKind::Tree);
 }
 
 pub fn try_mine(app: &mut App, rng: &mut impl Rng) {
-    hit_harvestable(app, rng, TargetKind::Boulder);
+    let found = {
+        let mut found = false;
+        let (px, py) = app.actor_pos();
+        for (_, pos) in app.world.query::<&Position>().with::<&Boulder>().iter() {
+            if (pos.x - px).abs() + (pos.y - py).abs() == 1 {
+                found = true;
+                break;
+            }
+        }
+        found
+    };
+    if found {
+        hit_harvestable(app, rng, TargetKind::Boulder);
+    } else {
+        // 浅沼挖黏土：M 键在无岩石的浅沼上 30% 挖出黏土
+        let (px, py) = app.actor_pos();
+        if app.map.terrain(px, py) == TerrainKind::ShallowMarsh && rng.gen_bool(0.30) {
+            let mut placed = false;
+            if let Some(actor) = app.actor() {
+                if let Ok(mut hands) = app.world.get::<&mut Hands>(actor) {
+                    let took = hands.take_n(ItemKind::Clay, 1);
+                    if took > 0 {
+                        placed = true;
+                    }
+                }
+            }
+            if !placed {
+                drop_item_near(app, (px, py), (px, py), ItemKind::Clay, 1);
+            }
+            app.push_log("你从泥沼里挖出一团黏土。黑乎乎的——但以后能烧成砖。".into());
+        } else {
+            app.push_log("旁边没有岩石可采。".into());
+        }
+    }
 }
 
 pub fn try_break_wall(app: &mut App, rng: &mut impl Rng) {
@@ -78,8 +113,15 @@ fn hit_harvestable(app: &mut App, rng: &mut impl Rng, kind: TargetKind) {
     };
 
     let (dmg_lo, dmg_hi) = match kind {
-        TargetKind::Tree => (30.0, 60.0),
-        TargetKind::Boulder => (20.0, 45.0),
+        TargetKind::Tree => {
+            if actor_has_item(app, ItemKind::StoneAxe) { (30.0, 60.0) }
+            else if actor_has_item(app, ItemKind::WoodAxe) { (8.0, 15.0) }
+            else { (1.0, 3.0) }
+        }
+        TargetKind::Boulder => {
+            if actor_has_item(app, ItemKind::StoneHammer) { (25.0, 45.0) }
+            else { (1.0, 3.0) }
+        }
         TargetKind::WallTarget => (25.0, 50.0),
     };
     let damage = rng.gen_range(dmg_lo..dmg_hi);
@@ -123,6 +165,18 @@ fn hit_harvestable(app: &mut App, rng: &mut impl Rng, kind: TargetKind) {
         && rng.gen_bool(0.20)
     {
         drop_item_near(app, tx, (px, py), ItemKind::MetalOre, 1);
+    }
+
+    // ── 砍树额外掉落：树枝(40%) + 树叶(80%) ──
+    if matches!(kind, TargetKind::Tree) {
+        if rng.gen_bool(0.40) {
+            let n = rng.gen_range(1..=2);
+            drop_item_near(app, tx, (px, py), ItemKind::Branch, n);
+        }
+        if rng.gen_bool(0.80) {
+            let n = rng.gen_range(1..=3);
+            drop_item_near(app, tx, (px, py), ItemKind::Leaves, n);
+        }
     }
 
     match kind {
@@ -211,6 +265,15 @@ pub fn try_harvest_bush(app: &mut App, rng: &mut impl Rng) -> bool {
         return false;
     };
 
+    // ── 荆棘藤反伤：采 Vine 25% 扎手 2-5 HP ──
+    if yield_item == ItemKind::Vine && rng.gen_bool(0.25) {
+        let thorn_dmg = rng.gen_range(2.0..5.0);
+        if let Some(actor) = app.actor() {
+            apply_damage(app, actor, thorn_dmg, (app.actor_pos().0, app.actor_pos().1));
+        }
+        app.push_log("你伸手去扯藤条——尖刺扎进了手指。".into());
+    }
+
     let roll = rng.gen_range(1..=100);
     let count = match roll {
         1..=34 => 1,
@@ -271,23 +334,12 @@ pub fn try_harvest_bush(app: &mut App, rng: &mut impl Rng) -> bool {
     true
 }
 
-/// 地形采摘额外产出（浅沼出黏土40%，密林出草药10%）
+/// 地形采摘额外产出：密林草药 10%，其他地形草药 1%
 fn terrain_harvest_extra(terrain: TerrainKind, rng: &mut impl Rng) -> Option<(ItemKind, u32)> {
-    match terrain {
-        TerrainKind::ShallowMarsh => {
-            if rng.gen_bool(0.40) {
-                Some((ItemKind::Clay, 1))
-            } else {
-                None
-            }
-        }
-        TerrainKind::DenseForest => {
-            if rng.gen_bool(0.10) {
-                Some((ItemKind::Herb, 1))
-            } else {
-                None
-            }
-        }
-        _ => None,
+    let herb_chance = if terrain == TerrainKind::DenseForest { 0.10 } else { 0.01 };
+    if rng.gen_bool(herb_chance) {
+        Some((ItemKind::Herb, 1))
+    } else {
+        None
     }
 }

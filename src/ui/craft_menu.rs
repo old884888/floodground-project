@@ -83,6 +83,10 @@ fn draw_browsing(frame: &mut Frame, app: &App, area: Rect, cursor: usize, scroll
                 Style::default().fg(Color::DarkGray),
                 wip_suffix.to_string(),
             ),
+            CraftCheck::NeedTool => (
+                Style::default().fg(Color::DarkGray),
+                wip_suffix.to_string(),
+            ),
             CraftCheck::Invalid => (Style::default().fg(Color::DarkGray), String::new()),
         };
 

@@ -262,26 +262,45 @@ impl LightLevel {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ItemKind {
+    // 基础资源
     Wood,
     BigStone,
     Stick,
     SmallStone,
     Berry,
+    // Plan 08 基础材料
+    Branch,      // 树枝
+    Leaves,      // 树叶
+    LongStick,   // 长木棍
+    Vine,        // 藤条
+    Rope,        // 绳子
+    SmallFlake,  // 石片
+    LargeFlake,  // 大石片
+    Bone,        // 骨头
     // 旧石器工具链
     StoneKnife,
     SharpStick,
-    Spear,
+    Spear,       // 火烤矛（显示名）
     StoneAxe,
     Torch,
+    // Plan 08 新工具
+    StoneHammer, // 石锤
+    StoneShovel, // 石铲
+    StoneDrill,  // 石钻
+    WoodKnife,   // 木刀
+    WoodAxe,     // 木斧
+    WoodShovel,  // 木铲
+    WoodSpear,   // 削尖长棍
+    BoneKnife,   // 骨刀
+    BoneNeedle,  // 骨针
     // Plan 07：地形差异化产出
-    Herb,       // 草药（密林/浅沼采摘）
-    Clay,       // 黏土（浅沼采集）
-    MetalOre,   // 金属矿（丘陵挖矿）
-    PoisonMush, // 毒蘑菇（密林/浅沼采摘，v1 不可食用）
+    Herb,
+    Clay,
+    MetalOre,
+    PoisonMush,
 }
 
 impl ItemKind {
-    /// 查表键——对应 items.ron 里的 key
     pub fn key(self) -> &'static str {
         match self {
             ItemKind::Wood => "wood",
@@ -289,11 +308,28 @@ impl ItemKind {
             ItemKind::Stick => "stick",
             ItemKind::SmallStone => "small_stone",
             ItemKind::Berry => "berry",
+            ItemKind::Branch => "branch",
+            ItemKind::Leaves => "leaves",
+            ItemKind::LongStick => "long_stick",
+            ItemKind::Vine => "vine",
+            ItemKind::Rope => "rope",
+            ItemKind::SmallFlake => "small_flake",
+            ItemKind::LargeFlake => "large_flake",
+            ItemKind::Bone => "bone",
             ItemKind::StoneKnife => "stone_knife",
             ItemKind::SharpStick => "sharp_stick",
             ItemKind::Spear => "spear",
             ItemKind::StoneAxe => "stone_axe",
             ItemKind::Torch => "torch",
+            ItemKind::StoneHammer => "stone_hammer",
+            ItemKind::StoneShovel => "stone_shovel",
+            ItemKind::StoneDrill => "stone_drill",
+            ItemKind::WoodKnife => "wood_knife",
+            ItemKind::WoodAxe => "wood_axe",
+            ItemKind::WoodShovel => "wood_shovel",
+            ItemKind::WoodSpear => "wood_spear",
+            ItemKind::BoneKnife => "bone_knife",
+            ItemKind::BoneNeedle => "bone_needle",
             ItemKind::Herb => "herb",
             ItemKind::Clay => "clay",
             ItemKind::MetalOre => "metal_ore",
@@ -302,7 +338,6 @@ impl ItemKind {
     }
 
     pub fn label(self) -> &'static str {
-        // 委托给注册表
         &crate::data::item_def(self.key()).name
     }
 }

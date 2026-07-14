@@ -59,7 +59,10 @@ pub const SETTLEMENT_SIZE_ITEMS: &[(&str, VillageSize)] = &[
 
 pub const DEBUG_TIME_ITEMS: &[&str] = &["黎明", "白天", "黄昏", "夜晚"];
 pub const DEBUG_WEATHER_ITEMS: &[&str] = &["晴", "阴", "毛毛雨", "中雨", "暴雨", "雷阵雨"];
-pub const DEBUG_TERRAIN_ITEMS: &[&str] = &["草药", "黏土", "金属矿", "毒蘑菇", "狼巢穴"];
+pub const DEBUG_TERRAIN_ITEMS: &[&str] = &[
+    "草药", "黏土", "金属矿", "毒蘑菇", "草药植株", "狼巢穴",
+    "树枝", "树叶", "长木棍", "藤条", "绳子", "石片", "大石片", "骨头",
+];
 
 pub const DEBUG_ITEM_COUNT: usize = DEBUG_ITEMS.len();
 
@@ -1241,6 +1244,28 @@ fn spawn_props(world: &mut World, props: &[crate::world::PropSpawn], rng: &mut i
                         max_hp: 2000.0,
                         yield_item: ItemKind::BigStone,
                         yield_hp_step: 100.0,
+                    },
+                ));
+            }
+            PropKind::Bramble => {
+                // 荆棘藤：采摘产出藤条，25% 扎手
+                world.spawn((
+                    Position { x: p.x, y: p.y },
+                    Bush {
+                        state: BushState::Fruiting,
+                        growth_timer: 0,
+                        yield_item: ItemKind::Vine,
+                    },
+                ));
+            }
+            PropKind::HerbPlant => {
+                // 草药植株，采摘直接得 Herb
+                world.spawn((
+                    Position { x: p.x, y: p.y },
+                    Bush {
+                        state: BushState::Fruiting,
+                        growth_timer: 0,
+                        yield_item: ItemKind::Herb,
                     },
                 ));
             }

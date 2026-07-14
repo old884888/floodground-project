@@ -266,6 +266,30 @@ pub fn tick_visual_effects(app: &mut App) {
     }
 }
 
+/// 返回玩家当前手持的最强武器伤害范围。空手 = (3.0, 8.0)
+fn best_weapon_dmg(app: &App) -> (f32, f32) {
+    use crate::components::{Hands, ItemKind};
+    let Some(actor) = app.actor() else { return (3.0, 8.0); };
+    let Ok(hands) = app.world.get::<&Hands>(actor) else { return (3.0, 8.0); };
+    let items = [hands.left, hands.right];
+    let mut best: (f32, f32) = (3.0, 8.0); // 空手基准
+    for slot in items.iter().flatten() {
+        let dmg = match slot.0 {
+            ItemKind::Spear => (15.0, 25.0),        // 火烤矛
+            ItemKind::WoodSpear => (8.0, 15.0),      // 削尖长棍
+            ItemKind::StoneAxe => (12.0, 22.0),
+            ItemKind::StoneHammer => (10.0, 18.0),
+            ItemKind::WoodAxe => (6.0, 12.0),
+            ItemKind::StoneKnife => (5.0, 9.0),
+            ItemKind::WoodKnife => (5.0, 10.0),
+            ItemKind::BoneKnife => (7.0, 12.0),
+            _ => continue,
+        };
+        if dmg.0 + dmg.1 > best.0 + best.1 { best = dmg; }
+    }
+    best
+}
+
 fn shuffle<T: Copy>(slice: &mut [T], rng: &mut impl Rng) {
     for i in (1..slice.len()).rev() {
         let j = rng.gen_range(0..=i);
@@ -284,7 +308,10 @@ pub fn try_player_attack(app: &mut App, target_x: i32, target_y: i32, rng: &mut 
         return false;
     }
 
-    let dmg = rng.gen_range(10.0..20.0);
+    let dmg = {
+        let best = best_weapon_dmg(app);
+        rng.gen_range(best.0..best.1)
+    };
     apply_damage(app, target, dmg, (target_x, target_y));
     let kill = app.world.get::<&Health>(target).map(|h| h.hp <= 0.0).unwrap_or(false);
 
