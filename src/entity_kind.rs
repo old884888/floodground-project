@@ -88,6 +88,10 @@ impl EntityKind {
             return EntityKind::Boulder;
         }
         if let Ok(bush) = app.world.get::<&Bush>(e) {
+            // Bramble 必须在普通 Bush 之前匹配，按 yield_item 区分
+            if bush.yield_item == ItemKind::Vine {
+                return EntityKind::Bramble;
+            }
             return EntityKind::Bush(bush.state);
         }
         if let Ok(pile) = app.world.get::<&Pile>(e) {
@@ -110,11 +114,6 @@ impl EntityKind {
         }
         if app.world.get::<&SmokingRack>(e).is_ok() {
             return EntityKind::SmokingRack;
-        }
-        if let Ok(bush) = app.world.get::<&Bush>(e) {
-            if bush.yield_item == ItemKind::Vine {
-                return EntityKind::Bramble;
-            }
         }
         if app.world.get::<&DirtRoad>(e).is_ok() {
             return EntityKind::DirtRoad;

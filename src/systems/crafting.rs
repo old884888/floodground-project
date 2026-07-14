@@ -44,10 +44,10 @@ pub static RECIPES: &[Recipe] = &[
         base_progress: 300,
         requires_fire: false,
         min_light: 1,
-        craft_desc: "正在用石锤敲打大石头...",
+        craft_desc: "正在敲打大石头打制大石片...",
         can_interrupt: true,
-        desc: "大石头对准了用石锤砸——崩下来的大石片是旧石器所有工具的主料。必须手持石锤。",
-        requires_tool: Some(ItemKind::StoneHammer),
+        desc: "举起来往地上砸——运气好出一片大的。有石锤效率高得多（进度更快+额外石片边角料）。",
+        requires_tool: None,
     },
     // ── 木材加工 ──
     Recipe {
@@ -691,11 +691,15 @@ fn finish_crafting(app: &mut App, entity: hecs::Entity, recipe_index: usize, rng
         result_count = rng.gen_range(1..=3);
     }
     if result_item == ItemKind::LargeFlake {
-        // 50% 额外一片
-        if rng.gen_bool(0.5) { result_count += 1; }
-        // 边角料：SmallFlake×2-3
-        let bonus = rng.gen_range(2..=3);
-        crate::items::place_item(app, px, py, ItemKind::SmallFlake, bonus);
+        if actor_has_item(app, ItemKind::StoneHammer) {
+            // 手持石锤：50% 额外一片 + SmallFlake 边角料
+            if rng.gen_bool(0.5) { result_count += 1; }
+            let bonus = rng.gen_range(2..=3);
+            crate::items::place_item(app, px, py, ItemKind::SmallFlake, bonus);
+        } else {
+            // 徒手砸：5% 出第二片，无常规边角料
+            if rng.gen_bool(0.05) { result_count += 1; }
+        }
     }
 
     // ── 石钻生火特殊处理 ──
@@ -785,7 +789,11 @@ pub fn update_crafting(app: &mut App, rng: &mut impl rand::Rng) {
         return;
     }
 
-    let progress_add = (BASE_CRAFT_SPEED as f32 * speed_mult) as u32;
+    let mut progress_add = (BASE_CRAFT_SPEED as f32 * speed_mult) as u32;
+    // 大石片：手持石锤加速 2×
+    if recipe.name == "大石片" && actor_has_item(app, ItemKind::StoneHammer) {
+        progress_add *= 2;
+    }
 
     let should_finish = if let Some(actor) = actor {
         if let Ok(mut cs) = app.world.get::<&mut CraftingState>(actor) {
