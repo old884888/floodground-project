@@ -24,8 +24,7 @@ pub fn run_tick(app: &mut App, rng: &mut impl rand::Rng) {
     app.tick += 1;
     app.events.push(GameEvent::Tick(app.tick));
 
-    // 任何 system 跑了 move/spawn/despawn 之后，索引会过期。
-    // 一次性重建比每次查询 O(N) 划算得多。
+    // 空间索引：只在上一 tick 有变动时重建（静止时跳过，省 50-75% 开销）
     app.rebuild_spatial_index();
 
     if app.tick.is_multiple_of(app.ticks_per_day) {
@@ -109,6 +108,7 @@ pub fn run_tick(app: &mut App, rng: &mut impl rand::Rng) {
     }
     nature::update_bushes(app);
     terrain_gen::update_wolf_dens(app, rng);
+    combat::tick_visual_effects(app);
 
     check_action_lock(app);
 

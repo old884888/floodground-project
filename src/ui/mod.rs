@@ -13,7 +13,7 @@ use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 use ratatui::Frame;
 
 use crate::app::{App, Screen};
-use crate::components::Position;
+use crate::components::{DamageNumber, HitFlash, Position};
 use crate::entity_kind::EntityKind;
 
 pub fn draw(frame: &mut Frame, app: &mut App) {
@@ -110,7 +110,7 @@ fn draw_help(frame: &mut Frame, app: &App, area: Rect) {
     } else if app.action_lock.is_some() {
         " [锁定] 该方向键连发 · 其余方向走路退出 · Esc取消 "
     } else if app.focused_tile.is_some() {
-        " [观察] 方向键移动光标 · [ ]滚动侧栏 · X/Esc退出 "
+        " [观察] 方向键移动光标 · [ ]滚动侧栏 · G瞬移 · X/Esc退出 "
     } else if app.examine_dir_prompt {
         " [查看] 按方向键选择要查看的格子 · Esc取消 "
     } else if app.examine.is_some() {
@@ -134,11 +134,19 @@ pub fn cycle_selection(app: &mut App) {
 }
 
 pub fn entity_glyph(app: &App, entity: hecs::Entity) -> (char, Color) {
+    if let Ok(flash) = app.world.get::<&HitFlash>(entity) {
+        if flash.frames % 2 == 0 {
+            return ('!', Color::Red);
+        }
+    }
     EntityKind::classify(app, entity).glyph()
 }
 
 /// 同格绘制优先级：数字越大越靠上
 pub fn entity_draw_priority(app: &App, entity: hecs::Entity) -> u8 {
+    if app.world.get::<&DamageNumber>(entity).is_ok() {
+        return 200; // 浮动数字始终在最上层
+    }
     EntityKind::classify(app, entity).draw_priority()
 }
 

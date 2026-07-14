@@ -2,17 +2,25 @@ use crate::app::App;
 use crate::components::TerrainKind;
 use crate::events::GameEvent;
 
-pub fn format_event(app: &App, event: &GameEvent) -> Option<String> {
+pub fn format_event(app: &mut App, event: &GameEvent) -> Option<String> {
     match event {
         GameEvent::DayElapsed(day) => Some(format!("—— 第 {} 天 ——", day)),
         GameEvent::CharacterMoved { entity, from: _, to } => {
-            // 进入特殊地形 → L1 日志
-            let terrain = app.map.terrain(to.0, to.1);
-            let msg = terrain_enter_text(terrain);
-            if !msg.is_empty() && Some(*entity) == app.actor() {
-                Some(msg.into())
-            } else {
+            // 进入特殊地形 → L1 日志（仅在 actor 跨入新地形时触发一次）
+            if Some(*entity) != app.actor() {
+                return None;
+            }
+            let current = app.map.terrain(to.0, to.1);
+            let prev = app.last_actor_terrain;
+            app.last_actor_terrain = Some(current);
+            if prev == Some(current) {
+                return None;
+            }
+            let msg = terrain_enter_text(current);
+            if msg.is_empty() {
                 None
+            } else {
+                Some(msg.into())
             }
         }
         GameEvent::Ate { entity } => {

@@ -161,6 +161,7 @@ fn extinguish_fires(app: &mut App, rng: &mut impl Rng) {
     for (entity, pos) in to_extinguish {
         let _ = app.world.despawn(entity);
         app.mark_spatial_dirty();
+        app.clear_lit_cache(); // 火源消失，照亮缓存失效
         app.events
             .push(GameEvent::FireExtinguished { pos });
         app.push_log("篝火被雨水浇灭了。".into());

@@ -72,6 +72,7 @@ fn handle_dead_key(app: &mut App, key: KeyEvent) {
                 app.player = next;
                 app.selected = Some(next);
                 app.player_dead = false;
+                app.last_actor_terrain = None; // 切角色：重置地形记忆
                 app.push_log("……你以为自己死了，但身体还在动。殖民者接班控制。".into());
             } else {
                 app.push_log("没有能接班的人。按 Q 退出。".into());
@@ -746,8 +747,40 @@ fn handle_observe_mode(app: &mut App, key: KeyEvent) {
             app.observe_scroll = 0;
             app.push_log("你收回了目光。".into());
         }
+        KeyCode::Char('g') | KeyCode::Char('G') => {
+            debug_teleport(app);
+        }
         _ => {}
     }
+}
+
+fn debug_teleport(app: &mut App) {
+    let Some(actor) = app.actor() else {
+        return;
+    };
+    let Some((tx, ty)) = app.focused_tile else {
+        return;
+    };
+    if !app.map.in_bounds(tx, ty) {
+        app.push_log("光标越界了。".into());
+        return;
+    }
+    if !app.map.is_walkable(tx, ty) {
+        app.push_log("那个地方走不动——你又不是鱼。".into());
+        return;
+    }
+    if app.is_blocked(tx, ty) {
+        app.push_log("那个位置被别的什么东西占了。".into());
+        return;
+    }
+    if let Ok(mut pos) = app.world.get::<&mut Position>(actor) {
+        pos.x = tx;
+        pos.y = ty;
+    }
+    app.focused_tile = None;
+    app.observe_scroll = 0;
+    app.last_actor_terrain = None; // 瞬移后：让下一步按新地形重新判断日志
+    app.push_log(format!("你瞬移到了 ({}, {})。", tx, ty));
 }
 
 fn move_observe_cursor(app: &mut App, dx: i32, dy: i32) {

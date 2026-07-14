@@ -1,7 +1,7 @@
 use rand::Rng;
 
 use crate::app::App;
-use crate::components::{Colonist, Dead, Fleeing, Health, Hostile, MoveCooldown, Player, Position};
+use crate::components::{Colonist, DamageNumber, Dead, Fleeing, Health, HitFlash, Hostile, MoveCooldown, Player, Position};
 use crate::items::drop_item_near;
 
 const PERCEPTION_RANGE: i32 = 8;
@@ -84,9 +84,7 @@ pub fn update_combat(app: &mut App, rng: &mut impl Rng) {
 
         if dist <= 1 {
             let dmg = rng.gen_range(5.0..15.0);
-            if let Ok(mut h) = app.world.get::<&mut Health>(target) {
-                h.hp -= dmg;
-            }
+            apply_damage(app, target, dmg, (px, py));
             let victim = app.entity_label(target);
             let attacker = app.visible_or_generic(entity, "什么东西");
             app.push_log(format!("{}咬了{}一口！", attacker, victim));
@@ -111,6 +109,24 @@ pub fn update_combat(app: &mut App, rng: &mut impl Rng) {
             random_move(app, entity, ex, ey, px, py, rng);
         }
     }
+}
+
+/// 统一伤害入口：扣血 + HitFlash + DamageNumber。所有伤害源都走这里。
+pub fn apply_damage(app: &mut App, victim: hecs::Entity, amount: f32, pos: (i32, i32)) {
+    // 死人不再受伤
+    if app.world.get::<&Dead>(victim).is_ok() {
+        return;
+    }
+    if let Ok(mut hp) = app.world.get::<&mut Health>(victim) {
+        hp.hp = (hp.hp - amount).max(0.0);
+    }
+    let _ = app.world.insert_one(victim, HitFlash { frames: 3 });
+    app.world.spawn((DamageNumber {
+        text: format!("-{}", amount as i32),
+        frame: 6,
+        x: pos.0,
+        y: pos.1,
+    },));
 }
 
 fn has_nearby_ally(app: &App, self_entity: hecs::Entity, self_x: i32, self_y: i32) -> bool {
@@ -225,6 +241,31 @@ fn try_move(app: &mut App, entity: hecs::Entity, ex: i32, ey: i32, dirs: &[(i32,
     false
 }
 
+/// 每 tick 递减 HitFlash / DamageNumber 帧数，归零清理
+pub fn tick_visual_effects(app: &mut App) {
+    let mut dead_flash = Vec::new();
+    for (e, flash) in app.world.query::<&mut HitFlash>().iter() {
+        flash.frames = flash.frames.saturating_sub(1);
+        if flash.frames == 0 {
+            dead_flash.push(e);
+        }
+    }
+    for e in dead_flash {
+        let _ = app.world.remove_one::<HitFlash>(e);
+    }
+
+    let mut dead_dmg = Vec::new();
+    for (e, dmg) in app.world.query::<&mut DamageNumber>().iter() {
+        dmg.frame = dmg.frame.saturating_sub(1);
+        if dmg.frame == 0 {
+            dead_dmg.push(e);
+        }
+    }
+    for e in dead_dmg {
+        let _ = app.world.despawn(e);
+    }
+}
+
 fn shuffle<T: Copy>(slice: &mut [T], rng: &mut impl Rng) {
     for i in (1..slice.len()).rev() {
         let j = rng.gen_range(0..=i);
@@ -244,14 +285,8 @@ pub fn try_player_attack(app: &mut App, target_x: i32, target_y: i32, rng: &mut 
     }
 
     let dmg = rng.gen_range(10.0..20.0);
-    let kill = {
-        if let Ok(mut hp) = app.world.get::<&mut Health>(target) {
-            hp.hp -= dmg;
-            hp.hp <= 0.0
-        } else {
-            false
-        }
-    };
+    apply_damage(app, target, dmg, (target_x, target_y));
+    let kill = app.world.get::<&Health>(target).map(|h| h.hp <= 0.0).unwrap_or(false);
 
     let target_name = app.entity_label(target);
     let actor_name = app

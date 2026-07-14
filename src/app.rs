@@ -1,6 +1,7 @@
 use hecs::{Entity, World};
 use rand::seq::SliceRandom;
 use rand::Rng;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 
 use crate::components::*;
@@ -378,6 +379,15 @@ pub struct App {
     pub world: World,
     pub map: GameMap,
     pub spatial: SpatialIndex,
+    /// 空间索引是否过期（spawn/despawn/移动后设 true，rebuild 后设 false）。
+    /// 静止 tick 跳过重建，省 50-75% rebuild 开销。
+    pub spatial_dirty: bool,
+    /// 火光照亮缓存：(x,y) → 是否被火照亮。跨帧有效，火源变化时清空。
+    lit_cache: RefCell<HashMap<(i32, i32), bool>>,
+    /// 视线缓存：to 坐标 → 玩家能否看见。vis_anchor 为 from 锚点，
+    /// 玩家移动后 anchor 变化 → 自动清空。
+    vis_cache: RefCell<HashMap<(i32, i32), bool>>,
+    vis_anchor: Cell<Option<(i32, i32)>>,
     pub camera: Camera,
     pub events: EventQueue,
     pub log: Vec<String>,
@@ -417,6 +427,8 @@ pub struct App {
     pub focused_tile: Option<(i32, i32)>,
     /// 观察面板滚动偏移（[ ] 键控制）
     pub observe_scroll: usize,
+    /// 上次 narrator 输出日志时 actor 所处的地形（防止丘陵等每步刷 L1 日志；切角色时重置为 None）
+    pub last_actor_terrain: Option<TerrainKind>,
     /// 制作菜单状态
     pub craft_menu: Option<CraftMenuState>,
     /// 当前天气
@@ -635,6 +647,10 @@ impl App {
             world,
             map,
             spatial: SpatialIndex::default(),
+            spatial_dirty: true, // 开局必须重建一次
+            lit_cache: RefCell::new(HashMap::new()),
+            vis_cache: RefCell::new(HashMap::new()),
+            vis_anchor: Cell::new(None),
             camera,
             events: EventQueue::default(),
             log: Vec::new(),
@@ -666,6 +682,7 @@ impl App {
             examine_dir_prompt: false,
             focused_tile: None,
             observe_scroll: 0,
+            last_actor_terrain: None,
             craft_menu: None,
             weather: Weather::Clear,
             weather_timer: 0,
@@ -832,14 +849,31 @@ impl App {
         self.weather.color_multiplier()
     }
 
-    /// 是否被篝火照亮（圆形半径）
+    /// 是否被篝火照亮（圆形半径）。结果缓存，火源变化时调 clear_lit_cache。
     pub fn lit_by_fire(&self, x: i32, y: i32) -> bool {
+        {
+            let cache = self.lit_cache.borrow();
+            if let Some(&v) = cache.get(&(x, y)) {
+                return v;
+            }
+        }
+        let result = self.compute_lit_by_fire(x, y);
+        self.lit_cache.borrow_mut().insert((x, y), result);
+        result
+    }
+
+    fn compute_lit_by_fire(&self, x: i32, y: i32) -> bool {
         for (_e, (pos, light)) in self.world.query::<(&Position, &LightSource)>().iter() {
             if crate::world::within_radius((pos.x, pos.y), (x, y), light.radius) {
                 return true;
             }
         }
         false
+    }
+
+    /// 清空火光缓存（火源 spawn/despawn/移动后调用）。
+    pub fn clear_lit_cache(&self) {
+        self.lit_cache.borrow_mut().clear();
     }
 
     /// 统一五级光照计算：max(环境光, 火源光, 手持火把光, 窗口光)，上限4
@@ -924,6 +958,23 @@ impl App {
     }
 
     pub fn can_see_tile(&self, from: (i32, i32), to: (i32, i32)) -> bool {
+        // 视线缓存：from 不变时跨帧命中
+        if self.vis_anchor.get() != Some(from) {
+            self.vis_anchor.set(Some(from));
+            self.vis_cache.borrow_mut().clear();
+        }
+        {
+            let cache = self.vis_cache.borrow();
+            if let Some(&v) = cache.get(&to) {
+                return v;
+            }
+        }
+        let result = self.compute_can_see(from, to);
+        self.vis_cache.borrow_mut().insert(to, result);
+        result
+    }
+
+    fn compute_can_see(&self, from: (i32, i32), to: (i32, i32)) -> bool {
         if self.lit_by_fire(to.0, to.1) {
             return true;
         }
@@ -1035,6 +1086,7 @@ impl App {
             None => list[0],
         };
         self.selected = Some(next);
+        self.last_actor_terrain = None; // 切角色：重置地形记忆
         let label = self
             .world
             .get::<&Name>(next)
@@ -1053,6 +1105,7 @@ impl App {
         let idx = (slot - 1) as usize;
         if let Some(entity) = list.get(idx) {
             self.selected = Some(*entity);
+            self.last_actor_terrain = None; // 切角色：重置地形记忆
             let label = self
                 .world
                 .get::<&Name>(*entity)
@@ -1113,6 +1166,9 @@ impl App {
     /// 每 tick 调一次：把 world 当前位置 + 阻挡关系复制到空间索引。
     /// 取代原来 N 次全表扫描。
     pub fn rebuild_spatial_index(&mut self) {
+        if !self.spatial_dirty {
+            return;
+        }
         self.spatial.by_tile.clear();
         self.spatial.blockers.clear();
         self.spatial.vision_blockers.clear();
@@ -1129,12 +1185,15 @@ impl App {
         for (_e, (pos, _)) in self.world.query::<(&Position, &BlocksVision)>().iter() {
             self.spatial.vision_blockers.insert((pos.x, pos.y));
         }
+        self.spatial_dirty = false;
     }
 
     /// 标记空间索引已过期（spawn/despawn/移动后用）。
-    /// 当前每 tick 无条件重建，此函数是防御性的——将来改为增量更新时会用到。
+    /// 下一 tick 开头会按需重建。同时清空视线/火光缓存（可能改了墙/火源）。
     pub fn mark_spatial_dirty(&mut self) {
-        let _ = self;
+        self.spatial_dirty = true;
+        self.vis_cache.borrow_mut().clear();
+        self.lit_cache.borrow_mut().clear();
     }
 
     pub fn spawn_settlement(&mut self, size: VillageSize, rng: &mut impl Rng) {

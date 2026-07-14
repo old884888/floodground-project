@@ -15,6 +15,8 @@ pub fn draw(frame: &mut Frame, app: &mut App, area: Rect) {
     let target = app.focused_tile.unwrap_or_else(|| app.player_pos());
     app.camera
         .follow(target, app.map.width, app.map.height, inner_w, inner_h);
+    // 视野/解雾锚点永远是玩家（X 模式相机可以飞到迷雾深处，但视野不外延）
+    let viewer = app.player_pos();
 
     let cam_x = app.camera.x;
     let cam_y = app.camera.y;
@@ -50,7 +52,7 @@ pub fn draw(frame: &mut Frame, app: &mut App, area: Rect) {
         let wy = cam_y + sy as i32;
         for sx in 0..view_w {
             let wx = cam_x + sx as i32;
-            let visible = app.can_see_tile(target, (wx, wy));
+            let visible = app.can_see_tile(viewer, (wx, wy));
             let lit = app.lit_by_fire(wx, wy);
 
             if !visible {
@@ -180,7 +182,7 @@ pub fn draw(frame: &mut Frame, app: &mut App, area: Rect) {
             // 不可见 / 未揭示 → 跳过
             let wx = p.wx;
             let wy = p.wy as i32;
-            if !app.can_see_tile(target, (wx, wy)) || !app.map.is_revealed(wx, wy) {
+            if !app.can_see_tile(viewer, (wx, wy)) || !app.map.is_revealed(wx, wy) {
                 continue;
             }
             // 有实体不覆盖
@@ -200,6 +202,46 @@ pub fn draw(frame: &mut Frame, app: &mut App, area: Rect) {
         // 非雨天清空粒子
         app.rain_particles.clear();
     }
+
+    // ── 浮动伤害数字：CDDA 风格，从受害者处向上飘，末两帧淡出 ──
+    for (_e, dmg) in app.world.query::<&crate::components::DamageNumber>().iter() {
+        let sx = dmg.x - cam_x;
+        // 向上飘：frame=MAX 时在受害者处，frame=0 时已上飘 3 格（归零前 despawn）
+        const MAX_FRAME: u8 = 6;
+        let elapsed = MAX_FRAME.saturating_sub(dmg.frame);
+        let offset_y = (elapsed as f32 * 0.5) as i32;
+        let sy = dmg.y - cam_y - offset_y;
+        if sx < 0 || sy < 0 || sx as usize >= view_w || sy as usize >= view_h {
+            continue;
+        }
+        let sx = sx as usize;
+        let sy = sy as usize;
+        // 可见性
+        if !app.can_see_tile(viewer, (dmg.x, dmg.y)) {
+            continue;
+        }
+        // 颜色：伤害 ≥10 用黄色（重击），普通红
+        let amount: i32 = dmg
+            .text
+            .trim_start_matches('-')
+            .trim_end_matches('!')
+            .parse()
+            .unwrap_or(0);
+        let color = if amount >= 10 {
+            Color::Yellow
+        } else {
+            Color::Red
+        };
+        let mut dmg_style = Style::default().fg(color).add_modifier(Modifier::BOLD);
+        // 末两帧淡出
+        if dmg.frame <= 2 {
+            dmg_style = dmg_style.add_modifier(Modifier::DIM);
+        }
+        if sx < lines[sy].spans.len() {
+            lines[sy].spans[sx] = Span::styled(dmg.text.clone(), dmg_style);
+        }
+    }
+
     // ── 闪电白闪：3 帧闪烁，跟渲染帧数绑定 ──
     if app.lightning_flash > 0 {
         for line in &mut lines {
@@ -209,6 +251,29 @@ pub fn draw(frame: &mut Frame, app: &mut App, area: Rect) {
             }
         }
         app.lightning_flash = app.lightning_flash.saturating_sub(1);
+    }
+
+    // ── X 光标标记：玩家看不到此格时画一个 X，避免光标在雾中消失 ──
+    if let Some((fx, fy)) = app.focused_tile {
+        let sx = fx - cam_x;
+        let sy = fy - cam_y;
+        if sx >= 0 && sy >= 0 && (sx as usize) < view_w && (sy as usize) < view_h
+            && !app.can_see_tile(viewer, (fx, fy))
+        {
+            let sx_u = sx as usize;
+            let sy_u = sy as usize;
+            if let Some(line) = lines.get_mut(sy_u) {
+                if line.spans.len() > sx_u {
+                    line.spans[sx_u] = Span::styled(
+                        "X",
+                        Style::default()
+                            .fg(Color::Yellow)
+                            .bg(Color::Black)
+                            .add_modifier(Modifier::BOLD),
+                    );
+                }
+            }
+        }
     }
 
     let title = format!(" 区域 ({},{}) ", target.0, target.1);

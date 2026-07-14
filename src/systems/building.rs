@@ -560,10 +560,7 @@ pub fn trigger_trap_at(app: &mut App, x: i32, y: i32, walker: hecs::Entity) {
     let damage = rand::thread_rng().gen_range(20..=40);
     let _ = app.world.despawn(trap_entity);
 
-    // 对踩中者造成伤害
-    if let Ok(mut hp) = app.world.get::<&mut Health>(walker) {
-        hp.hp = (hp.hp - damage as f32).max(0.0);
-    }
+    crate::systems::combat::apply_damage(app, walker, damage as f32, (x, y));
 
     let name = app.entity_label(walker);
     app.push_log(format!(

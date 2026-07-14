@@ -141,6 +141,21 @@ pub struct MoveCooldown {
 #[derive(Debug, Clone, Copy)]
 pub struct WolfDen;
 
+/// 受击闪烁：被攻击时插入，frames 每 tick 递减，归零后由 cleanup 移除
+#[derive(Debug, Clone, Copy)]
+pub struct HitFlash {
+    pub frames: u8,
+}
+
+/// 浮动伤害数字：独立实体，挂在被攻击位置上方。frame 每 tick 递减，归零 despawn
+#[derive(Debug, Clone)]
+pub struct DamageNumber {
+    pub text: String,
+    pub frame: u8,
+    pub x: i32,
+    pub y: i32,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct Tree;
 
