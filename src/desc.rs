@@ -1,7 +1,7 @@
 use hecs::Entity;
 
 use crate::app::App;
-use crate::components::*;
+use crate::components::{AnimalKind, BushState, ItemKind, TerrainKind, *};
 use crate::entity_kind::EntityKind;
 use crate::systems::crafting::RECIPES;
 
@@ -228,6 +228,18 @@ fn describe_entity(app: &App, e: Entity) -> Option<String> {
         }
         EntityKind::Bramble => {
             "一丛纠缠的荆棘藤，尖刺闪闪发亮。藤条是好东西——但得先说服它放手。".into()
+        }
+        EntityKind::Prey(AnimalKind::Deer) => {
+            "一只鹿——警惕的眼睛盯着你，随时准备跑。".into()
+        }
+        EntityKind::Prey(AnimalKind::Boar) => {
+            "一头野猪——低沉的咕噜声从喉咙里滚出来。它不怕你，这点很糟糕。".into()
+        }
+        EntityKind::Prey(AnimalKind::Rabbit) => {
+            "一只灰扑扑的兔子——耳朵竖着，随时会跳走。".into()
+        }
+        EntityKind::Corpse => {
+            "一具尸体——肉还新鲜，但不会永远新鲜。".into()
         }
         EntityKind::Campfire => {
             "一团不屈的火焰，是这该死的世界里唯一温暖的谎言。烧的是木柴，暖的是希望——虽然两者都不持久。".into()

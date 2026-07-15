@@ -26,7 +26,15 @@ fn valid_terrains(kind: AnimalKind) -> &'static [TerrainKind] {
 }
 
 /// 每 50 tick 调用：种群维护 + 刷新 + 繁殖
+/// tick=0 时种子初始种群
 pub fn update_ecology(app: &mut App, rng: &mut impl Rng) {
+    // 开局种子初始种群（每种猎物至少 2-3 只）
+    if app.tick == 0 {
+        for kind in &[AnimalKind::Deer, AnimalKind::Boar, AnimalKind::Rabbit] {
+            let count = rng.gen_range(2..=4);
+            for _ in 0..count { spawn_at_edge(app, *kind, rng); }
+        }
+    }
     if !app.tick.is_multiple_of(50) { return; }
 
     let mut pop_map: HashMap<(AnimalKind, TerrainKind), u32> = HashMap::new();

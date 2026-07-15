@@ -4,6 +4,7 @@ use rand::Rng;
 
 use crate::app::App;
 use crate::components::*;
+use crate::world::{MAP_HEIGHT, MAP_WIDTH};
 
 /// 每 tick 更新猎物行为
 pub fn update_prey_ai(app: &mut App, rng: &mut impl Rng) {
@@ -37,8 +38,8 @@ pub fn update_prey_ai(app: &mut App, rng: &mut impl Rng) {
             AnimalKind::Rabbit => {
                 if dist <= 8 {
                     let (nx, ny) = (
-                        (pos.x + rng.gen_range(-5..=5)).clamp(0, 498),
-                        (pos.y + rng.gen_range(-5..=5)).clamp(0, 498),
+                        (pos.x + rng.gen_range(-5..=5)).clamp(0, MAP_WIDTH - 1),
+                        (pos.y + rng.gen_range(-5..=5)).clamp(0, MAP_HEIGHT - 1),
                     );
                     if app.map.is_walkable(nx, ny) && !app.is_blocked(nx, ny) {
                         if let Ok(mut p) = app.world.get::<&mut Position>(e) {

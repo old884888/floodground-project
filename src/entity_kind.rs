@@ -10,7 +10,7 @@
 use hecs::Entity;
 
 use crate::app::App;
-use crate::components::*;
+use crate::components::{AnimalKind, *};
 
 #[derive(Debug, Clone)]
 pub enum EntityKind {
@@ -40,6 +40,8 @@ pub enum EntityKind {
     PitShelter,                   // 地坑庇护所
     SmokingRack,                  // 烟熏架
     Bramble,                      // 荆棘藤
+    Prey(AnimalKind),             // 猎物
+    Corpse,                       // 尸体
     Named(String),                // 兜底
 }
 
@@ -121,6 +123,12 @@ impl EntityKind {
         if app.world.get::<&StoneRoad>(e).is_ok() {
             return EntityKind::StoneRoad;
         }
+        if app.world.get::<&crate::components::Corpse>(e).is_ok() {
+            return EntityKind::Corpse;
+        }
+        if let Ok(animal) = app.world.get::<&crate::components::Animal>(e) {
+            return EntityKind::Prey(animal.kind);
+        }
         if app.world.get::<&Floor>(e).is_ok() {
             return EntityKind::Floor;
         }
@@ -151,6 +159,8 @@ impl EntityKind {
             EntityKind::LeanTo | EntityKind::PitShelter => 50,
             EntityKind::SmokingRack => 30,
             EntityKind::Bramble => 28,
+            EntityKind::Prey(_) => 70,
+            EntityKind::Corpse => 15,
             EntityKind::DirtRoad | EntityKind::StoneRoad => 4,
             EntityKind::Named(_) => 1,
         }
@@ -190,6 +200,10 @@ impl EntityKind {
             EntityKind::PitShelter => ('▼', Color::Rgb(100, 80, 40)),
             EntityKind::SmokingRack => ('╤', Color::Rgb(100, 70, 30)),
             EntityKind::Bramble => ('&', Color::Rgb(100, 140, 40)),
+            EntityKind::Prey(AnimalKind::Deer) => ('D', Color::Rgb(180, 140, 80)),
+            EntityKind::Prey(AnimalKind::Boar) => ('B', Color::Rgb(150, 60, 30)),
+            EntityKind::Prey(AnimalKind::Rabbit) => ('r', Color::Rgb(180, 180, 180)),
+            EntityKind::Corpse => ('%', Color::Rgb(180, 40, 40)),
             EntityKind::Pile(Some(item)) => crate::ui::item_glyph(*item),
             EntityKind::Pile(None) => ('.', Color::DarkGray),
             EntityKind::CraftWip(_, _) => ('…', Color::Yellow),

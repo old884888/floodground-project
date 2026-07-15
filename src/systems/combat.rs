@@ -337,7 +337,21 @@ pub fn try_player_attack(app: &mut App, target_x: i32, target_y: i32, rng: &mut 
         rng.gen_range(best.0..best.1)
     };
     apply_damage(app, target, dmg, (target_x, target_y));
+    let is_prey = app.world.get::<&crate::components::Animal>(target).ok().map(|a| a.kind);
     let kill = app.world.get::<&Health>(target).map(|h| h.hp <= 0.0).unwrap_or(false);
+
+    // 猎物死亡 → 留尸体
+    if kill {
+        if let Some(kind) = is_prey {
+            let uid = app.next_uid; app.next_uid += 1;
+            app.world.spawn((
+                Position { x: target_x, y: target_y },
+                crate::components::EntityUID(uid),
+                crate::components::Corpse { animal: kind, spoilage: 90000 },
+                crate::components::BlocksMovement,
+            ));
+        }
+    }
 
     let target_name = app.entity_label(target);
     let actor_name = app
