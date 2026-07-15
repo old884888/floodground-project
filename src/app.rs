@@ -44,6 +44,7 @@ pub struct App {
     pub selected: Option<Entity>,
     pub player: Entity,
     pub should_quit: bool,
+    pub next_uid: u64,
     /// 玩家死了 → 暂停所有自动 tick，等玩家读日志决定退出
     pub player_dead: bool,
     pub pending_move: Option<(i32, i32)>,
@@ -297,6 +298,7 @@ impl App {
             build_menu: None,
             build_target: None,
             pre_build_speed: None,
+            next_uid: 0,
             world,
             map,
             spatial: SpatialIndex::default(),

@@ -1,3 +1,7 @@
+use std::collections::{HashMap, HashSet};
+
+use serde::{Deserialize, Serialize};
+
 use crate::components::TerrainKind;
 use crate::data::{DataError, TerrainDef, TerrainMap};
 use noise::NoiseFn;
@@ -11,7 +15,14 @@ pub const CAMP_CX: i32 = 250;
 pub const CAMP_CY: i32 = 250;
 pub const CAMP_HALF: i32 = 6;
 
-#[derive(Debug, Clone)]
+pub const CHUNK_SIZE: i32 = 16;
+
+/// 世界坐标 → Chunk 坐标
+pub fn chunk_coord(x: i32, y: i32) -> (i32, i32) {
+    (x.div_euclid(CHUNK_SIZE), y.div_euclid(CHUNK_SIZE))
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[allow(dead_code)]
 pub struct Tile {
     pub terrain_id: String,
@@ -23,14 +34,33 @@ pub struct Tile {
     pub color_bg: (u8, u8, u8),
 }
 
+/// 16×16 区块——世界数据最小存储单元
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Chunk {
+    pub cx: i32,
+    pub cy: i32,
+    pub tiles: Vec<Tile>,
+    pub roof: Vec<bool>,
+    pub window_light: Vec<u8>,
+    pub revealed: Vec<bool>,
+}
+
+impl Chunk {
+    fn new(cx: i32, cy: i32) -> Self {
+        let sz = (CHUNK_SIZE * CHUNK_SIZE) as usize;
+        Self { cx, cy, tiles: Vec::with_capacity(sz), roof: vec![false; sz], window_light: vec![0u8; sz], revealed: vec![false; sz] }
+    }
+    fn local_idx(x: i32, y: i32) -> usize {
+        (y.rem_euclid(CHUNK_SIZE) * CHUNK_SIZE + x.rem_euclid(CHUNK_SIZE)) as usize
+    }
+}
+
 #[derive(Debug)]
 pub struct GameMap {
     pub width: i32,
     pub height: i32,
-    tiles: Vec<Tile>,
-    pub roof: Vec<bool>,
-    pub window_light: Vec<u8>,
-    revealed: Vec<bool>,
+    chunks: HashMap<(i32, i32), Chunk>,
+    pub dirty_chunks: HashSet<(i32, i32)>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -109,234 +139,135 @@ fn spawn_table(terrain: TerrainKind) -> &'static [(PropKind, f32)] {
 
 impl GameMap {
     pub fn generate(terrain: &TerrainMap, rng: &mut impl Rng) -> Result<MapGenResult, DataError> {
-        // 校验所有地形 key 存在
-        for kind in [
-            TerrainKind::Grass,
-            TerrainKind::LightForest,
-            TerrainKind::DenseForest,
-            TerrainKind::Hill,
-            TerrainKind::ShallowMarsh,
-            TerrainKind::ShallowWater,
-            TerrainKind::Stream,
-            TerrainKind::Sand,
-            TerrainKind::Water,
-            TerrainKind::Dirt,
-        ] {
+        for kind in [TerrainKind::Grass, TerrainKind::LightForest, TerrainKind::DenseForest,
+            TerrainKind::Hill, TerrainKind::ShallowMarsh, TerrainKind::ShallowWater,
+            TerrainKind::Stream, TerrainKind::Sand, TerrainKind::Water, TerrainKind::Dirt] {
             if !terrain.contains_key(kind.key()) {
-                return Err(DataError::MissingKey {
-                    path: "terrain.ron".into(),
-                    key: kind.key().into(),
-                });
+                return Err(DataError::MissingKey { path: "terrain.ron".into(), key: kind.key().into() });
             }
         }
-
-        let tile_count = (MAP_WIDTH * MAP_HEIGHT) as usize;
-        let mut tiles = Vec::with_capacity(tile_count);
-        let mut terrain_grid: Vec<TerrainKind> = Vec::with_capacity(tile_count);
-
-        // ── Value 噪声生成区域 ──
+        let tc = (MAP_WIDTH * MAP_HEIGHT) as usize;
+        let mut terrain_grid: Vec<TerrainKind> = Vec::with_capacity(tc);
         let seed: u32 = rng.gen();
         let noise = Value::new(seed);
-        const NOISE_FREQ: f64 = 0.02;
-
-        for y in 0..MAP_HEIGHT {
-            for x in 0..MAP_WIDTH {
-                let n = noise.get([x as f64 * NOISE_FREQ, y as f64 * NOISE_FREQ]);
-                let normalized = (n + 1.0) / 2.0; // ~[0, 1]
-                let kind = if in_camp(x, y) {
-                    TerrainKind::Dirt
-                } else {
-                    terrain_from_noise(normalized)
-                };
-                terrain_grid.push(kind);
-            }
-        }
-
-        // ── 浅水区中心变深水：四邻全是浅水的格子 → Water ──
-        let mut water_deepened = 0u32;
-        for y in 1..MAP_HEIGHT - 1 {
-            for x in 1..MAP_WIDTH - 1 {
-                let idx = (y * MAP_WIDTH + x) as usize;
-                if terrain_grid[idx] != TerrainKind::ShallowWater {
-                    continue;
-                }
-                // 四个方向都是浅水 → 中心转深水
-                let neighbors = [
-                    ((y - 1) * MAP_WIDTH + x) as usize,
-                    ((y + 1) * MAP_WIDTH + x) as usize,
-                    (y * MAP_WIDTH + (x - 1)) as usize,
-                    (y * MAP_WIDTH + (x + 1)) as usize,
-                ];
-                if neighbors.iter().all(|&ni| terrain_grid[ni] == TerrainKind::ShallowWater)
-                {
+        const NF: f64 = 0.02;
+        for y in 0..MAP_HEIGHT { for x in 0..MAP_WIDTH {
+            let n = noise.get([x as f64 * NF, y as f64 * NF]);
+            let normalized = (n + 1.0) / 2.0;
+            terrain_grid.push(if in_camp(x, y) { TerrainKind::Dirt } else { terrain_from_noise(normalized) });
+        }}
+        // 深水 + 溪流后处理
+        for y in 1..MAP_HEIGHT-1 { for x in 1..MAP_WIDTH-1 {
+            let idx = (y * MAP_WIDTH + x) as usize;
+            if terrain_grid[idx] == TerrainKind::ShallowWater {
+                let nbrs = [((y-1)*MAP_WIDTH+x) as usize, ((y+1)*MAP_WIDTH+x) as usize,
+                    (y*MAP_WIDTH+(x-1)) as usize, (y*MAP_WIDTH+(x+1)) as usize];
+                if nbrs.iter().all(|&ni| terrain_grid[ni] == TerrainKind::ShallowWater) {
                     terrain_grid[idx] = TerrainKind::Water;
-                    water_deepened += 1;
+                } else {
+                    let hnw = nbrs.iter().any(|&ni| terrain_grid[ni] != TerrainKind::ShallowWater
+                        && terrain_grid[ni] != TerrainKind::Water && terrain_grid[ni] != TerrainKind::Stream);
+                    if hnw && rng.gen_bool(0.15) { terrain_grid[idx] = TerrainKind::Stream; }
                 }
             }
-        }
-        if water_deepened > 0 {
-            let _ = water_deepened;
-        }
-
-        // ── 溪流：浅水区边缘 15% 转 Stream ──
-        for y in 1..MAP_HEIGHT - 1 {
-            for x in 1..MAP_WIDTH - 1 {
-                let idx = (y * MAP_WIDTH + x) as usize;
-                if terrain_grid[idx] != TerrainKind::ShallowWater {
-                    continue;
+        }}
+        // 切分 Chunk
+        let mut chunks = HashMap::new();
+        let cs = CHUNK_SIZE;
+        for cy in 0..=(MAP_HEIGHT-1).div_euclid(cs) { for cx in 0..=(MAP_WIDTH-1).div_euclid(cs) {
+            let mut chunk = Chunk::new(cx, cy);
+            for ly in 0..cs as usize { for lx in 0..cs as usize {
+                let (wx, wy) = (cx*cs+lx as i32, cy*cs+ly as i32);
+                if wx < MAP_WIDTH && wy < MAP_HEIGHT {
+                    let gidx = (wy*MAP_WIDTH+wx) as usize;
+                    let def = terrain.get(terrain_grid[gidx].key()).expect("validated terrain key");
+                    chunk.tiles.push(tile_from_def(def, terrain_grid[gidx]));
                 }
-                // 至少一个邻格不是水 → 边缘格
-                let has_nonwater = [
-                    ((y - 1) * MAP_WIDTH + x) as usize,
-                    ((y + 1) * MAP_WIDTH + x) as usize,
-                    (y * MAP_WIDTH + (x - 1)) as usize,
-                    (y * MAP_WIDTH + (x + 1)) as usize,
-                ].iter().any(|&ni| {
-                    terrain_grid[ni] != TerrainKind::ShallowWater
-                        && terrain_grid[ni] != TerrainKind::Water
-                        && terrain_grid[ni] != TerrainKind::Stream
-                });
-                if has_nonwater && rng.gen_bool(0.15) {
-                    terrain_grid[idx] = TerrainKind::Stream;
-                }
-            }
-        }
-
-        // ── 根据地形查表建 Tile ──
-        for &kind in &terrain_grid {
-            let def = terrain.get(kind.key()).expect("terrain key validated at function entry");
-            tiles.push(tile_from_def(def, kind));
-        }
-
-        let roof = vec![false; tile_count];
-        let window_light = vec![0u8; tile_count];
-        let revealed = vec![false; tile_count];
-
-        let map = Self {
-            width: MAP_WIDTH,
-            height: MAP_HEIGHT,
-            tiles,
-            roof,
-            window_light,
-            revealed,
-        };
-
-        // ── spawn table 生成实体 ──
+            }}
+            chunks.insert((cx, cy), chunk);
+        }}
+        let map = Self { width: MAP_WIDTH, height: MAP_HEIGHT, chunks, dirty_chunks: HashSet::new() };
+        // spawn table
         let mut props = Vec::new();
-        for y in 0..MAP_HEIGHT {
-            for x in 0..MAP_WIDTH {
-                if in_camp(x, y) {
-                    continue;
-                }
-                let idx = (y * MAP_WIDTH + x) as usize;
-                let kind = terrain_grid[idx];
-                if !map.is_walkable(x, y) {
-                    continue;
-                }
-                for &(prop, chance) in spawn_table(kind) {
-                    if rng.gen_bool(chance as f64) {
-                        props.push(PropSpawn { x, y, kind: prop });
-                        break; // 一格只放一个
-                    }
+        for y in 0..MAP_HEIGHT { for x in 0..MAP_WIDTH {
+            if in_camp(x, y) { continue; }
+            let kind = terrain_grid[(y*MAP_WIDTH+x) as usize];
+            for &(prop, chance) in spawn_table(kind) {
+                if rng.gen_bool(chance as f64) {
+                    let def = terrain.get(kind.key()).unwrap();
+                    if def.is_walkable { props.push(PropSpawn { x, y, kind: prop }); break; }
                 }
             }
-        }
-
-        // ── 地面散落物（少量）──
+        }}
         spawn_loose_items(&map, &mut props, rng, PropKind::Stick, 2, 4);
         spawn_loose_items(&map, &mut props, rng, PropKind::SmallStone, 2, 4);
-
         Ok(MapGenResult { map, props })
     }
 
-    pub fn idx(&self, x: i32, y: i32) -> usize {
-        (y * self.width + x) as usize
-    }
+    pub fn empty() -> Self { Self { width: MAP_WIDTH, height: MAP_HEIGHT, chunks: HashMap::new(), dirty_chunks: HashSet::new() } }
 
-    /// 返回该格的地形类型
-    pub fn terrain(&self, x: i32, y: i32) -> TerrainKind {
-        self.tile(x, y)
-            .map(|t| t.terrain_kind)
-            .unwrap_or(TerrainKind::Grass)
-    }
+    fn chunk_at(&self, x: i32, y: i32) -> Option<&Chunk> { self.chunks.get(&chunk_coord(x, y)) }
+    fn chunk_at_mut(&mut self, x: i32, y: i32) -> Option<&mut Chunk> { self.chunks.get_mut(&chunk_coord(x, y)) }
 
+    pub fn mark_dirty(&mut self, x: i32, y: i32) { if self.in_bounds(x, y) { self.dirty_chunks.insert(chunk_coord(x, y)); } }
+    pub fn take_dirty_chunks(&mut self) -> Vec<Chunk> {
+        let v: Vec<Chunk> = self.dirty_chunks.iter().filter_map(|cc| self.chunks.get(cc).cloned()).collect();
+        self.dirty_chunks.clear(); v
+    }
+    pub fn apply_chunks(&mut self, saved: Vec<Chunk>) { for c in saved { self.chunks.insert((c.cx, c.cy), c); } }
+
+    pub fn idx(&self, _x: i32, _y: i32) -> usize { 0 }
+    pub fn terrain(&self, x: i32, y: i32) -> TerrainKind { self.tile(x, y).map(|t| t.terrain_kind).unwrap_or(TerrainKind::Grass) }
     pub fn has_roof(&self, x: i32, y: i32) -> bool {
         if !self.in_bounds(x, y) { return false; }
-        self.roof[self.idx(x, y)]
+        let (cc, li) = (chunk_coord(x, y), Chunk::local_idx(x, y));
+        self.chunks.get(&cc).map(|c| c.roof[li]).unwrap_or(false)
     }
-
     pub fn set_roof(&mut self, x: i32, y: i32, value: bool) {
         if self.in_bounds(x, y) {
-            let idx = self.idx(x, y);
-            self.roof[idx] = value;
+            let (cc, li) = (chunk_coord(x, y), Chunk::local_idx(x, y));
+            if let Some(ch) = self.chunks.get_mut(&cc) { ch.roof[li] = value; }
+            self.mark_dirty(x, y);
         }
     }
-
     pub fn window_light_at(&self, x: i32, y: i32) -> u8 {
         if !self.in_bounds(x, y) { return 0; }
-        self.window_light[self.idx(x, y)]
+        let (cc, li) = (chunk_coord(x, y), Chunk::local_idx(x, y));
+        self.chunks.get(&cc).map(|c| c.window_light[li]).unwrap_or(0)
     }
-
     pub fn set_window_light(&mut self, x: i32, y: i32, value: u8) {
         if self.in_bounds(x, y) {
-            let idx = self.idx(x, y);
-            if value > self.window_light[idx] {
-                self.window_light[idx] = value;
-            }
+            let (cc, li) = (chunk_coord(x, y), Chunk::local_idx(x, y));
+            if let Some(ch) = self.chunks.get_mut(&cc) { if value > ch.window_light[li] { ch.window_light[li] = value; } }
         }
     }
-
     pub fn reveal(&mut self, x: i32, y: i32) {
         if self.in_bounds(x, y) {
-            let i = self.idx(x, y);
-            self.revealed[i] = true;
+            let (cc, li) = (chunk_coord(x, y), Chunk::local_idx(x, y));
+            if let Some(ch) = self.chunks.get_mut(&cc) { ch.revealed[li] = true; }
         }
     }
-
     pub fn is_revealed(&self, x: i32, y: i32) -> bool {
-        if !self.in_bounds(x, y) {
-            return false;
-        }
-        let i = self.idx(x, y);
-        self.revealed[i]
+        if !self.in_bounds(x, y) { return false; }
+        let (cc, li) = (chunk_coord(x, y), Chunk::local_idx(x, y));
+        self.chunks.get(&cc).map(|c| c.revealed[li]).unwrap_or(false)
     }
-
     pub fn reveal_radius(&mut self, cx: i32, cy: i32, radius: i32) {
         let r2 = radius * radius;
-        for dy in -radius..=radius {
-            for dx in -radius..=radius {
-                let x = cx + dx;
-                let y = cy + dy;
-                if self.in_bounds(x, y) && dx * dx + dy * dy <= r2 {
-                    let i = self.idx(x, y);
-                    self.revealed[i] = true;
-                }
-            }
-        }
+        for dy in -radius..=radius { for dx in -radius..=radius {
+            let (x, y) = (cx+dx, cy+dy);
+            if self.in_bounds(x, y) && dx*dx+dy*dy <= r2 { self.reveal(x, y); }
+        }}
     }
-
-    fn coords_in_bounds(x: i32, y: i32) -> bool {
-        x >= 0 && y >= 0 && x < MAP_WIDTH && y < MAP_HEIGHT
-    }
-
-    pub fn in_bounds(&self, x: i32, y: i32) -> bool {
-        Self::coords_in_bounds(x, y)
-    }
-
+    fn coords_in_bounds(x: i32, y: i32) -> bool { x >= 0 && y >= 0 && x < MAP_WIDTH && y < MAP_HEIGHT }
+    pub fn in_bounds(&self, _x: i32, _y: i32) -> bool { Self::coords_in_bounds(_x, _y) }
     pub fn tile(&self, x: i32, y: i32) -> Option<&Tile> {
-        if !self.in_bounds(x, y) { return None; }
-        Some(&self.tiles[(y * self.width + x) as usize])
+        let (cc, li) = (chunk_coord(x, y), Chunk::local_idx(x, y));
+        self.chunks.get(&cc).and_then(|c| c.tiles.get(li))
     }
-
-    pub fn is_walkable(&self, x: i32, y: i32) -> bool {
-        self.tile(x, y).map(|t| t.is_walkable).unwrap_or(false)
-    }
-
-    pub fn blocks_vision(&self, x: i32, y: i32) -> bool {
-        self.tile(x, y).map(|t| t.blocks_vision).unwrap_or(true)
-    }
+    pub fn is_walkable(&self, x: i32, y: i32) -> bool { self.tile(x, y).map(|t| t.is_walkable).unwrap_or(false) }
+    pub fn blocks_vision(&self, x: i32, y: i32) -> bool { self.tile(x, y).map(|t| t.blocks_vision).unwrap_or(true) }
 }
-
 fn spawn_loose_items(map: &GameMap, props: &mut Vec<PropSpawn>, rng: &mut impl Rng, kind: PropKind, min: u32, max: u32) {
     let count = rng.gen_range(min..=max);
     let mut placed = 0u32;
