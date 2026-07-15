@@ -108,10 +108,15 @@ fn draw_header(frame: &mut Frame, app: &App, area: Rect) {
 fn draw_quit_menu(frame: &mut Frame, app: &App) {
     if app.saving {
         let area = frame.area();
+        const SPINNER: &[char] = &['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+        let spinner = SPINNER[(app.save_frame as usize / 2) % SPINNER.len()];
+        let bar_w = 20usize;
+        let filled = (app.save_frame as usize * 7).min(bar_w);
+        let bar = format!("[{}{}]", "█".repeat(filled), "░".repeat(bar_w - filled));
         let lines = vec![
-            Line::from(Span::styled("存档中...", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))),
+            Line::from(Span::styled(format!("{} 存档中...", spinner), Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))),
             Line::from(""),
-            Line::from(Span::styled("████████████████████████", Style::default().fg(Color::Green))),
+            Line::from(Span::styled(bar, Style::default().fg(Color::Green))),
         ];
         let w = 30u16; let h = 5u16;
         let (x, y) = ((area.width - w) / 2, (area.height - h) / 2);

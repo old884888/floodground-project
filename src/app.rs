@@ -47,6 +47,7 @@ pub struct App {
     pub quit_menu: bool,
     pub quit_cursor: u8,
     pub saving: bool,
+    pub save_frame: u8,
     pub next_uid: u64,
     /// 玩家死了 → 暂停所有自动 tick，等玩家读日志决定退出
     pub player_dead: bool,
@@ -323,6 +324,7 @@ impl App {
             quit_menu: false,
             quit_cursor: 0,
             saving: false,
+            save_frame: 0,
             player_dead: false,
             pending_move: None,
             pending_torture: false,

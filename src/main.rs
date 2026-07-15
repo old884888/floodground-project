@@ -138,14 +138,17 @@ fn run_loop(
             }
         }
 
-        // 延迟存档：渲染帧已画了"存档中..."，这里真写盘
+        // 延迟存档：先转 3 帧动画让用户看到，再真写盘
         if app.saving {
-            if let Err(e) = crate::save::save_game(app) {
-                app.push_log(format!("存档失败: {}", e));
-            } else {
-                app.push_log("已存档。".into());
+            app.save_frame += 1;
+            if app.save_frame >= 3 {
+                if let Err(e) = crate::save::save_game(app) {
+                    app.push_log(format!("存档失败: {}", e));
+                } else {
+                    app.push_log("已存档。".into());
+                }
+                app.should_quit = true;
             }
-            app.should_quit = true;
         }
 
         if app.should_quit {
