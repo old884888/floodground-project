@@ -440,29 +440,10 @@ fn handle_menu_key(app: &mut App, key: KeyEvent) {
                     app.push_log("没有存档。".into());
                     return;
                 }
-                // 切加载画面再读档（显示进度条）
+                // 切加载画面再读档（先画进度条，下帧真读盘）
                 app.screen = crate::app::Screen::Loading;
-                app.loading_tick = 30;
-                match crate::save::load_game() {
-                    Ok((data, world, uid_map)) => {
-                        app.world = world;
-                        app.player = uid_map.get(&data.player_uid).copied().unwrap_or(app.player);
-                        app.selected = uid_map.get(&data.selected_uid).copied().or(Some(app.player));
-                        app.tick = data.tick;
-                        app.day = data.day;
-                        app.weather = data.weather;
-                        app.weather_timer = data.weather_timer;
-                        app.reputation = data.reputation;
-                        app.next_uid = data.next_uid;
-                        app.map.apply_chunks(data.dirty_chunks);
-                        app.rebuild_spatial_index();
-                        app.push_log("已加载存档。".into());
-                    }
-                    Err(e) => {
-                        app.screen = crate::app::Screen::MainMenu;
-                        app.push_log(format!("读档失败: {}", e));
-                    }
-                }
+                app.loading_tick = 0;
+                app.pending_load = true;
             }
             2 => { app.should_quit = true; }
             _ => {}

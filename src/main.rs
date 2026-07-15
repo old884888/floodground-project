@@ -138,6 +138,29 @@ fn run_loop(
             }
         }
 
+        // 延迟读档：渲染帧已画了 Loading 画面，这里真读盘
+        if app.pending_load {
+            match crate::save::load_game() {
+                Ok((data, world, uid_map)) => {
+                    app.world = world;
+                    app.player = uid_map.get(&data.player_uid).copied().unwrap_or(app.player);
+                    app.selected = uid_map.get(&data.selected_uid).copied().or(Some(app.player));
+                    app.tick = data.tick; app.day = data.day;
+                    app.weather = data.weather; app.weather_timer = data.weather_timer;
+                    app.reputation = data.reputation; app.next_uid = data.next_uid;
+                    app.map.apply_chunks(data.dirty_chunks);
+                    app.rebuild_spatial_index();
+                    app.loading_tick = 30; // 跳到2/3，留0.3s动画收尾
+                    app.push_log("已加载存档。".into());
+                }
+                Err(e) => {
+                    app.screen = crate::app::Screen::MainMenu;
+                    app.push_log(format!("读档失败: {}", e));
+                }
+            }
+            app.pending_load = false;
+        }
+
         // 延迟存档：先转 3 帧动画让用户看到，再真写盘
         if app.saving {
             app.save_frame += 1;
