@@ -243,6 +243,7 @@ impl LightLevel {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, strum::IntoStaticStr)]
+#[strum(serialize_all = "snake_case")]
 pub enum ItemKind {
     // 基础资源
     Wood,
