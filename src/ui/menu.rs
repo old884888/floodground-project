@@ -59,23 +59,22 @@ pub fn draw(frame: &mut Frame, app: &App) {
     );
 
     // 菜单项
-    let items = ["开始游戏", "退出游戏"];
+    let has_save = std::path::Path::new("saves/slot_01.ron.gz").exists();
+    let items = ["开始游戏", "继续游戏", "退出游戏"];
     for (i, &item) in items.iter().enumerate() {
-        let prefix = if i as u8 == app.menu.cursor {
-            "▶ "
-        } else {
-            "  "
-        };
-        let style = if i as u8 == app.menu.cursor {
-            Style::default()
-                .fg(Color::Yellow)
-                .add_modifier(Modifier::BOLD)
+        let disabled = i == 1 && !has_save;
+        let label = if disabled { "继续游戏 (无存档)" } else { item };
+        let prefix = if i as u8 == app.menu.cursor { "▶ " } else { "  " };
+        let style = if disabled {
+            Style::default().fg(Color::DarkGray)
+        } else if i as u8 == app.menu.cursor {
+            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
         } else {
             Style::default().fg(Color::White)
         };
         frame.render_widget(
             Paragraph::new(Line::from(Span::styled(
-                format!("{}{}", prefix, item),
+                format!("{}{}", prefix, label),
                 style,
             ))),
             inner[2 + i],

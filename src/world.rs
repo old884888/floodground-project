@@ -215,6 +215,7 @@ impl GameMap {
         self.dirty_chunks.clear(); v
     }
     pub fn apply_chunks(&mut self, saved: Vec<Chunk>) { for c in saved { self.chunks.insert((c.cx, c.cy), c); } }
+    pub fn all_chunks_cloned(&self) -> Vec<Chunk> { self.chunks.values().cloned().collect() }
 
     pub fn idx(&self, _x: i32, _y: i32) -> usize { 0 }
     pub fn terrain(&self, x: i32, y: i32) -> TerrainKind { self.tile(x, y).map(|t| t.terrain_kind).unwrap_or(TerrainKind::Grass) }

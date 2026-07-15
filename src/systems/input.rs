@@ -416,12 +416,13 @@ fn move_observe_cursor(app: &mut App, dx: i32, dy: i32) {
 // ── 主菜单键盘处理 ──
 
 fn handle_menu_key(app: &mut App, key: KeyEvent) {
+    let max = 2; // 0=开始, 1=继续, 2=退出
     match key.code {
         KeyCode::Up | KeyCode::Char('w') | KeyCode::Char('k') => {
-            app.menu.cursor = if app.menu.cursor == 0 { 1 } else { app.menu.cursor - 1 };
+            app.menu.cursor = if app.menu.cursor == 0 { max } else { app.menu.cursor - 1 };
         }
         KeyCode::Down | KeyCode::Char('s') | KeyCode::Char('j') => {
-            app.menu.cursor = if app.menu.cursor >= 1 { 0 } else { app.menu.cursor + 1 };
+            app.menu.cursor = if app.menu.cursor >= max { 0 } else { app.menu.cursor + 1 };
         }
         KeyCode::Enter => match app.menu.cursor {
             0 => {
@@ -429,13 +430,37 @@ fn handle_menu_key(app: &mut App, key: KeyEvent) {
                 app.loading_tick = 0;
             }
             1 => {
-                app.should_quit = true;
+                if !std::path::Path::new("saves/slot_01.ron.gz").exists() {
+                    app.push_log("没有存档。".into());
+                    return;
+                }
+                // 继续游戏：加载存档
+                match crate::save::load_game() {
+                    Ok((data, world, uid_map)) => {
+                        app.world = world;
+                        app.player = uid_map.get(&data.player_uid).copied().unwrap_or(app.player);
+                        app.selected = uid_map.get(&data.selected_uid).copied().or(Some(app.player));
+                        app.tick = data.tick;
+                        app.day = data.day;
+                        app.weather = data.weather;
+                        app.weather_timer = data.weather_timer;
+                        app.reputation = data.reputation;
+                        app.next_uid = data.next_uid;
+                        app.map.apply_chunks(data.dirty_chunks);
+                        app.rebuild_spatial_index();
+                        app.screen = crate::app::Screen::Loading;
+                        app.loading_tick = 0;
+                        app.push_log("已加载存档。".into());
+                    }
+                    Err(e) => {
+                        app.push_log(format!("读档失败: {}", e));
+                    }
+                }
             }
+            2 => { app.should_quit = true; }
             _ => {}
         },
-        KeyCode::Char('q') | KeyCode::Char('Q') => {
-            app.should_quit = true;
-        }
+        KeyCode::Char('q') | KeyCode::Char('Q') => { app.should_quit = true; }
         _ => {}
     }
 }

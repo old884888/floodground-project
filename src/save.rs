@@ -40,7 +40,7 @@ pub struct EntitySnapshot {
     pub components: Vec<ComponentSnapshot>,
 }
 
-pub fn save_game(app: &App) -> Result<(), String> {
+pub fn save_game(app: &mut App) -> Result<(), String> {
     let uid_map: HashMap<Entity, u64> = app.world.query::<&EntityUID>().iter()
         .map(|(e, u)| (e, u.0)).collect();
 
@@ -60,8 +60,10 @@ pub fn save_game(app: &App) -> Result<(), String> {
         selected_uid: app.selected.and_then(|e| uid_map.get(&e).copied()).unwrap_or(0),
         next_uid: app.next_uid,
         entities,
-        dirty_chunks: Vec::new(), // TODO: access via &self method
+        dirty_chunks: app.map.all_chunks_cloned(),
     };
+
+    // v1 全量存档，不清 dirty（后续增量时再加）
 
     let ron_text = ron::ser::to_string_pretty(&data, ron::ser::PrettyConfig::default())
         .map_err(|e| format!("序列化失败: {}", e))?;
