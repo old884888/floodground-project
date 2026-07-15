@@ -69,7 +69,7 @@ pub const DEBUG_SUB_TERRAIN: usize = 14;
 
 // ── 天气 ──
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Weather {
     Clear,
     Overcast,

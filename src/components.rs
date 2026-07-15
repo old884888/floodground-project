@@ -53,7 +53,7 @@ pub struct Mood {
     pub value: f32,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Act {
     Idle,
     Eating,
@@ -144,7 +144,7 @@ pub struct Tree;
 #[derive(Debug, Clone, Copy)]
 pub struct Boulder;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BushState {
     None,
     Growing,
@@ -242,7 +242,7 @@ impl LightLevel {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::IntoStaticStr)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::IntoStaticStr, Serialize, Deserialize)]
 #[strum(serialize_all = "snake_case")]
 pub enum ItemKind {
     // 基础资源
@@ -561,7 +561,7 @@ pub struct BodyTemp {
 }
 
 /// 持续效果种类
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EffectKind {
     Diarrhea,   // 腹泻：口渴×1.5, 心情−10
     // 预留：
@@ -625,6 +625,52 @@ impl Wet {
             15.0
         }
     }
+}
+
+// ── Plan 10: 存档系统 ──
+
+/// Entity 唯一标识：每次 spawn 分配递增 u64，跨存档稳定
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct EntityUID(pub u64);
+
+/// 组件快照：存档时每个组件的序列化形态
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ComponentSnapshot {
+    Position { x: i32, y: i32 },
+    Name(String),
+    Player,
+    Colonist,
+    Captive { will: f32 },
+    Hostile,
+    Dead,
+    Health { hp: f32, max_hp: f32 },
+    Hunger { value: f32 },
+    Thirst { value: f32 },
+    Energy { value: f32 },
+    Mood { value: f32 },
+    BodyTemp { value: f32 },
+    Wet { value: f32 },
+    MoveCooldown { ticks: u32 },
+    Fleeing,
+    AiState { current: Act },
+    Hands { left: Option<(ItemKind, u32)>, right: Option<(ItemKind, u32)> },
+    Harvestable { hp: f32, max_hp: f32, yield_item: ItemKind, yield_hp_step: f32 },
+    Pile { slots: Vec<(ItemKind, u32)> },
+    Tree,
+    Boulder,
+    Bush { state: BushState, growth_timer: u64, yield_item: ItemKind },
+    StickTrap { builder_uid: u64 },
+    Door { open: bool },
+    Wall, WoodWall, StoneWall, Window, Bed, ContainerTag, Floor,
+    DirtRoad, StoneRoad, Campfire,
+    LightSource { radius: i32, brightness: u8 },
+    WolfDen,
+    LeanTo, PitShelter, SmokingRack,
+    Puddle,
+    Building { recipe_index: usize, progress: u32, total: u32 },
+    CraftWip { recipe_index: usize, progress: u32 },
+    StatusEffect { kind: EffectKind, remaining: u32 },
+    TraitTag(String),
 }
 
 #[cfg(test)]

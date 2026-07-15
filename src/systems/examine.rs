@@ -335,6 +335,15 @@ pub fn action_to_lock(app: &mut App, action: ExamineAction) {
         _ => {
             close(app);
             app.action_lock = Some((tx, ty, action, dx, dy));
+            match action {
+                ExamineAction::Chop => app.pending_chop = true,
+                ExamineAction::Mine => app.pending_mine = true,
+                ExamineAction::Harvest => app.pending_grab = true,
+                ExamineAction::Torture => app.pending_torture = true,
+                ExamineAction::BreakWall => app.pending_break_wall = true,
+                _ => {}
+            }
+            app.force_step = true;
             let dir = match (dx, dy) {
                 (0, -1) => "北",
                 (0, 1) => "南",
@@ -342,7 +351,7 @@ pub fn action_to_lock(app: &mut App, action: ExamineAction) {
                 (1, 0) => "东",
                 _ => "那边",
             };
-            app.push_log(format!("你盯住了{}的{}，{}方向键连发。Esc退出。", dir, action_label(action), dir));
+            app.push_log(format!("你盯住了{}的{}，再按{}方向键连发。Esc退出。", dir, action_label(action), dir));
         }
     }
 }

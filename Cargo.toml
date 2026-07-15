@@ -13,6 +13,7 @@ rand = "0.8"
 thiserror = "1"
 noise = "0.9"
 strum = { version = "0.26", features = ["derive"] }
+flate2 = "1"
 
 [profile.dev]
 debug = "line-tables-only"
