@@ -51,6 +51,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     craft_menu::draw(frame, app, frame.area());
     debug_popup::draw(frame, app, frame.area());
     log_view::draw(frame, app, root[2]);
+    draw_quit_menu(frame, app);
     draw_help(frame, app, root[3]);
 }
 
@@ -102,6 +103,24 @@ fn draw_header(frame: &mut Frame, app: &App, area: Rect) {
             .border_style(Style::default().fg(Color::DarkGray)),
     );
     frame.render_widget(widget, area);
+}
+
+fn draw_quit_menu(frame: &mut Frame, app: &App) {
+    if !app.quit_menu { return; }
+    let area = frame.area();
+    let lines = vec![
+        Line::from(Span::styled("退出前要存档吗？", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))),
+        Line::from(""),
+        Line::from(Span::styled(" [S] 存档并退出", Style::default().fg(Color::White))),
+        Line::from(Span::styled(" [Q] 直接退出（不存档）", Style::default().fg(Color::DarkGray))),
+        Line::from(Span::styled(" [Esc] 取消，继续游戏", Style::default().fg(Color::DarkGray))),
+    ];
+    let w = 30u16; let h = 7u16;
+    let x = area.x + (area.width.saturating_sub(w)) / 2;
+    let y = area.y + (area.height.saturating_sub(h)) / 2;
+    let popup = Rect { x, y, width: w, height: h };
+    frame.render_widget(Clear, popup);
+    frame.render_widget(Paragraph::new(lines).block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Yellow))), popup);
 }
 
 fn draw_help(frame: &mut Frame, app: &App, area: Rect) {

@@ -44,6 +44,7 @@ pub struct App {
     pub selected: Option<Entity>,
     pub player: Entity,
     pub should_quit: bool,
+    pub quit_menu: bool,
     pub next_uid: u64,
     /// 玩家死了 → 暂停所有自动 tick，等玩家读日志决定退出
     pub player_dead: bool,
@@ -317,6 +318,7 @@ impl App {
             selected: Some(player),
             player,
             should_quit: false,
+            quit_menu: false,
             player_dead: false,
             pending_move: None,
             pending_torture: false,
@@ -352,6 +354,17 @@ impl App {
         app.weather = start_weather;
         app.weather_timer = dur;
         app.push_log(format!("当前天气：{}。", start_weather.label()));
+        // 批量分配 EntityUID（App 构造前 spawn 的实体）
+        {
+            let mut uid = 0u64;
+            let entities: Vec<hecs::Entity> = app.world.query::<&Position>().iter().map(|(e, _)| e).collect();
+            for e in entities {
+                let _ = app.world.insert_one(e, crate::components::EntityUID(uid));
+                uid += 1;
+            }
+            app.next_uid = uid;
+        }
+
         app.push_log("你醒了过来。营火旁的空地很小——外面是一整片血壤。".into());
         app.rebuild_spatial_index();
         app.map.reveal_radius(CAMP_CX, CAMP_CY, 30);
@@ -391,6 +404,15 @@ impl App {
     /// - 是玩家则设 `player_dead`
     ///
     /// 同一 tick 多次调用是安全的。
+    /// 统一 spawn 入口：分配 EntityUID + 自增 next_uid
+    pub fn spawn_entity(&mut self, bundle: impl hecs::DynamicBundle) -> Entity {
+        let uid = self.next_uid;
+        self.next_uid += 1;
+        let e = self.world.spawn(bundle);
+        let _ = self.world.insert_one(e, crate::components::EntityUID(uid));
+        e
+    }
+
     pub fn kill(&mut self, entity: hecs::Entity, cause: impl Into<String>) {
         if self.world.get::<&crate::components::Dead>(entity).is_ok() {
             return;

@@ -22,6 +22,23 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
         return;
     }
 
+    if app.quit_menu {
+        match key.code {
+            KeyCode::Char('s') | KeyCode::Char('S') => {
+                if let Err(e) = crate::save::save_game(app) {
+                    app.push_log(format!("存档失败: {}", e));
+                } else {
+                    app.push_log("已存档。".into());
+                }
+                app.should_quit = true;
+            }
+            KeyCode::Char('q') | KeyCode::Char('Q') => { app.should_quit = true; }
+            KeyCode::Esc => { app.quit_menu = false; }
+            _ => {}
+        }
+        return;
+    }
+
     if app.debug_popup.is_some() {
         handle_debug_popup_key(app, key);
         return;
