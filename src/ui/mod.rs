@@ -108,14 +108,23 @@ fn draw_header(frame: &mut Frame, app: &App, area: Rect) {
 fn draw_quit_menu(frame: &mut Frame, app: &App) {
     if !app.quit_menu { return; }
     let area = frame.area();
-    let lines = vec![
+    let items = ["存档并退出", "直接退出（不存档）", "取消，继续游戏"];
+    let mut lines = vec![
         Line::from(Span::styled("退出前要存档吗？", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))),
         Line::from(""),
-        Line::from(Span::styled(" [S] 存档并退出", Style::default().fg(Color::White))),
-        Line::from(Span::styled(" [Q] 直接退出（不存档）", Style::default().fg(Color::DarkGray))),
-        Line::from(Span::styled(" [Esc] 取消，继续游戏", Style::default().fg(Color::DarkGray))),
     ];
-    let w = 30u16; let h = 7u16;
+    for (i, &item) in items.iter().enumerate() {
+        let (prefix, style) = if i as u8 == app.quit_cursor {
+            ("▶ ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
+        } else {
+            ("  ", Style::default().fg(Color::White))
+        };
+        lines.push(Line::from(Span::styled(format!("{} {}", prefix, item), style)));
+    }
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled("↑↓选择 Enter确认 Esc取消", Style::default().fg(Color::DarkGray))));
+    let h = (lines.len() + 2) as u16;
+    let w = 30u16;
     let x = area.x + (area.width.saturating_sub(w)) / 2;
     let y = area.y + (area.height.saturating_sub(h)) / 2;
     let popup = Rect { x, y, width: w, height: h };

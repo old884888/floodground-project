@@ -45,6 +45,7 @@ pub struct App {
     pub player: Entity,
     pub should_quit: bool,
     pub quit_menu: bool,
+    pub quit_cursor: u8,
     pub next_uid: u64,
     /// 玩家死了 → 暂停所有自动 tick，等玩家读日志决定退出
     pub player_dead: bool,
@@ -319,6 +320,7 @@ impl App {
             player,
             should_quit: false,
             quit_menu: false,
+            quit_cursor: 0,
             player_dead: false,
             pending_move: None,
             pending_torture: false,
