@@ -204,7 +204,7 @@ impl GameMap {
 
         // ── 根据地形查表建 Tile ──
         for &kind in &terrain_grid {
-            let def = terrain.get(kind.key()).unwrap();
+            let def = terrain.get(kind.key()).expect("terrain key validated at function entry");
             tiles.push(tile_from_def(def, kind));
         }
 

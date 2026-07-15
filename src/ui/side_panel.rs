@@ -6,11 +6,10 @@ use ratatui::Frame;
 
 use crate::app::App;
 use crate::components::{
-    Captive, Colonist, Dead, Energy, Hands, Health, Hunger, Mood, Name, Player, Position, Thirst,
-    TraitTag,
+    BodyTemp, Captive, Colonist, Dead, EffectKind, Energy, Hands, Health, Hunger, Mood, Name, Pile,
+    Player, Position, StatusEffect, Thirst, TraitTag,
 };
 use crate::items::{has_pile, pile_at};
-use crate::components::Pile;
 
 pub fn draw(frame: &mut Frame, app: &App, area: Rect) {
     if let Some((fx, fy)) = app.focused_tile {
@@ -110,6 +109,27 @@ fn draw_tab_character(app: &App) -> Vec<Line<'static>> {
                 Color::Green
             };
             lines.push(bar_line("心情", m.value, 100.0, color));
+        }
+        if let Ok(t) = app.world.get::<&BodyTemp>(entity) {
+            let color = if t.value < 15.0 { Color::Rgb(100, 150, 255) }
+            else if t.value < 30.0 { Color::Cyan }
+            else if t.value < 45.0 { Color::Rgb(150, 200, 255) }
+            else if t.value > 60.0 { Color::Yellow }
+            else { Color::Green };
+            lines.push(bar_line("体温", t.value, 100.0, color));
+        }
+        // 腹泻标识
+        if let Ok(effects) = app.world.get::<&Vec<StatusEffect>>(entity) {
+            for eff in effects.iter() {
+                if eff.kind == EffectKind::Diarrhea {
+                    let ticks_left = eff.remaining;
+                    let hours = ticks_left as f32 / 1200.0;
+                    lines.push(Line::from(Span::styled(
+                        format!("💩 腹泻 剩 {:.1}h", hours),
+                        Style::default().fg(Color::Rgb(180, 100, 50)),
+                    )));
+                }
+            }
         }
         if let Ok(c) = app.world.get::<&Captive>(entity) {
             lines.push(bar_line("意志", c.will, 100.0, Color::Magenta));

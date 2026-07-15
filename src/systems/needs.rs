@@ -24,10 +24,11 @@ pub fn update_needs(app: &mut App) {
     let temp_map: std::collections::HashMap<hecs::Entity, f32> = app
         .world.query::<&BodyTemp>().iter().map(|(e, t)| (e, t.value)).collect();
 
-    // Effect 列表（腹泻等）
-    let effect_map: std::collections::HashMap<hecs::Entity, Vec<EffectKind>> = app
+    // Effect 查询：只对有关键效果（腹泻）的实体做快速判断
+    let diarrhea_set: std::collections::HashSet<hecs::Entity> = app
         .world.query::<&Vec<StatusEffect>>().iter()
-        .map(|(e, v)| (e, v.iter().map(|s| s.kind).collect()))
+        .filter(|(_, v)| v.iter().any(|s| s.kind == EffectKind::Diarrhea))
+        .map(|(e, _)| e)
         .collect();
 
     let weather_mood = app.weather.mood_penalty();
@@ -44,7 +45,7 @@ pub fn update_needs(app: &mut App) {
         // ── 基础衰减 ──
         hunger.value -= hunger_per;
         let mut thirst_mult: f32 = 1.0;
-        if effect_map.get(&entity).is_some_and(|v| v.contains(&EffectKind::Diarrhea)) {
+        if diarrhea_set.contains(&entity) {
             thirst_mult = 1.5;
         }
         if temp_map.get(&entity).copied().unwrap_or(60.0) > 60.0 {
@@ -77,7 +78,7 @@ pub fn update_needs(app: &mut App) {
         if energy.value < 20.0 { mood.value -= energy_mood; }
 
         let target_debuff = weather_mood + wet_mood
-            + if effect_map.get(&entity).is_some_and(|v| v.contains(&EffectKind::Diarrhea)) { diarrhea_mood } else { 0.0 };
+            + if diarrhea_set.contains(&entity) { diarrhea_mood } else { 0.0 };
         let prev = app.weather_mood_tracker.get(&entity).copied().unwrap_or(0.0);
         let delta = target_debuff - prev;
         if delta != 0.0 {

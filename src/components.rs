@@ -72,8 +72,9 @@ pub struct TraitTag(pub String);
 
 // —— 地形类型（Plan 07）——
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, strum::IntoStaticStr, strum::EnumString)]
 #[serde(rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
 pub enum TerrainKind {
     Grass,
     LightForest,
@@ -88,37 +89,14 @@ pub enum TerrainKind {
 }
 
 impl TerrainKind {
-    /// 对应 terrain.ron 里的 key
     pub fn key(self) -> &'static str {
-        match self {
-            TerrainKind::Grass => "grass",
-            TerrainKind::LightForest => "light_forest",
-            TerrainKind::DenseForest => "dense_forest",
-            TerrainKind::Hill => "hill",
-            TerrainKind::ShallowMarsh => "shallow_marsh",
-            TerrainKind::ShallowWater => "shallow_water",
-            TerrainKind::Stream => "stream",
-            TerrainKind::Sand => "sand",
-            TerrainKind::Water => "water",
-            TerrainKind::Dirt => "dirt",
-        }
+        self.into()
     }
 
     #[allow(dead_code)]
     pub fn from_key(s: &str) -> Option<Self> {
-        Some(match s {
-            "grass" => TerrainKind::Grass,
-            "light_forest" => TerrainKind::LightForest,
-            "dense_forest" => TerrainKind::DenseForest,
-            "hill" => TerrainKind::Hill,
-            "shallow_marsh" => TerrainKind::ShallowMarsh,
-            "shallow_water" => TerrainKind::ShallowWater,
-            "stream" => TerrainKind::Stream,
-            "sand" => TerrainKind::Sand,
-            "water" => TerrainKind::Water,
-            "dirt" => TerrainKind::Dirt,
-            _ => return None,
-        })
+        use std::str::FromStr;
+        Self::from_str(s).ok()
     }
 
     /// 站在该地形上每 tick 自动潮湿增量
@@ -264,7 +242,7 @@ impl LightLevel {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::IntoStaticStr)]
 pub enum ItemKind {
     // 基础资源
     Wood,
@@ -306,39 +284,7 @@ pub enum ItemKind {
 
 impl ItemKind {
     pub fn key(self) -> &'static str {
-        match self {
-            ItemKind::Wood => "wood",
-            ItemKind::BigStone => "big_stone",
-            ItemKind::Stick => "stick",
-            ItemKind::SmallStone => "small_stone",
-            ItemKind::Berry => "berry",
-            ItemKind::Branch => "branch",
-            ItemKind::Leaves => "leaves",
-            ItemKind::LongStick => "long_stick",
-            ItemKind::Vine => "vine",
-            ItemKind::Rope => "rope",
-            ItemKind::SmallFlake => "small_flake",
-            ItemKind::LargeFlake => "large_flake",
-            ItemKind::Bone => "bone",
-            ItemKind::StoneKnife => "stone_knife",
-            ItemKind::SharpStick => "sharp_stick",
-            ItemKind::Spear => "spear",
-            ItemKind::StoneAxe => "stone_axe",
-            ItemKind::Torch => "torch",
-            ItemKind::StoneHammer => "stone_hammer",
-            ItemKind::StoneShovel => "stone_shovel",
-            ItemKind::StoneDrill => "stone_drill",
-            ItemKind::WoodKnife => "wood_knife",
-            ItemKind::WoodAxe => "wood_axe",
-            ItemKind::WoodShovel => "wood_shovel",
-            ItemKind::WoodSpear => "wood_spear",
-            ItemKind::BoneKnife => "bone_knife",
-            ItemKind::BoneNeedle => "bone_needle",
-            ItemKind::Herb => "herb",
-            ItemKind::Clay => "clay",
-            ItemKind::MetalOre => "metal_ore",
-            ItemKind::PoisonMush => "poison_mush",
-        }
+        self.into()
     }
 
     pub fn label(self) -> &'static str {
