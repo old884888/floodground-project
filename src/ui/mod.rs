@@ -106,6 +106,20 @@ fn draw_header(frame: &mut Frame, app: &App, area: Rect) {
 }
 
 fn draw_quit_menu(frame: &mut Frame, app: &App) {
+    if app.saving {
+        let area = frame.area();
+        let lines = vec![
+            Line::from(Span::styled("存档中...", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))),
+            Line::from(""),
+            Line::from(Span::styled("████████████████████████", Style::default().fg(Color::Green))),
+        ];
+        let w = 30u16; let h = 5u16;
+        let (x, y) = ((area.width - w) / 2, (area.height - h) / 2);
+        let popup = Rect { x, y, width: w, height: h };
+        frame.render_widget(Clear, popup);
+        frame.render_widget(Paragraph::new(lines).block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Yellow))), popup);
+        return;
+    }
     if !app.quit_menu { return; }
     let area = frame.area();
     let items = ["存档并退出", "直接退出（不存档）", "取消，继续游戏"];

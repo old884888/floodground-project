@@ -32,13 +32,8 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             }
             KeyCode::Enter => match app.quit_cursor {
                 0 => {
-                    app.push_log("存档中...".into());
-                    if let Err(e) = crate::save::save_game(app) {
-                        app.push_log(format!("存档失败: {}", e));
-                    } else {
-                        app.push_log("已存档。".into());
-                    }
-                    app.should_quit = true;
+                    app.saving = true;
+                    app.quit_menu = false;
                 }
                 1 => { app.should_quit = true; }
                 2 => { app.quit_menu = false; }
@@ -445,7 +440,9 @@ fn handle_menu_key(app: &mut App, key: KeyEvent) {
                     app.push_log("没有存档。".into());
                     return;
                 }
-                // 继续游戏：加载存档
+                // 切加载画面再读档（显示进度条）
+                app.screen = crate::app::Screen::Loading;
+                app.loading_tick = 30;
                 match crate::save::load_game() {
                     Ok((data, world, uid_map)) => {
                         app.world = world;
@@ -459,11 +456,10 @@ fn handle_menu_key(app: &mut App, key: KeyEvent) {
                         app.next_uid = data.next_uid;
                         app.map.apply_chunks(data.dirty_chunks);
                         app.rebuild_spatial_index();
-                        app.screen = crate::app::Screen::Loading;
-                        app.loading_tick = 0;
                         app.push_log("已加载存档。".into());
                     }
                     Err(e) => {
+                        app.screen = crate::app::Screen::MainMenu;
                         app.push_log(format!("读档失败: {}", e));
                     }
                 }
