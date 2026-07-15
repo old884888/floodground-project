@@ -1,5 +1,6 @@
 pub mod ai;
 pub mod building;
+pub mod debug_commands;
 pub mod combat;
 pub mod crafting;
 pub mod dark;
