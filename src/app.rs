@@ -404,15 +404,6 @@ impl App {
     /// - 是玩家则设 `player_dead`
     ///
     /// 同一 tick 多次调用是安全的。
-    /// 统一 spawn 入口：分配 EntityUID + 自增 next_uid
-    pub fn spawn_entity(&mut self, bundle: impl hecs::DynamicBundle) -> Entity {
-        let uid = self.next_uid;
-        self.next_uid += 1;
-        let e = self.world.spawn(bundle);
-        let _ = self.world.insert_one(e, crate::components::EntityUID(uid));
-        e
-    }
-
     pub fn kill(&mut self, entity: hecs::Entity, cause: impl Into<String>) {
         if self.world.get::<&crate::components::Dead>(entity).is_ok() {
             return;

@@ -204,20 +204,10 @@ impl GameMap {
         Ok(MapGenResult { map, props })
     }
 
-    pub fn empty() -> Self { Self { width: MAP_WIDTH, height: MAP_HEIGHT, chunks: HashMap::new(), dirty_chunks: HashSet::new() } }
-
-    fn chunk_at(&self, x: i32, y: i32) -> Option<&Chunk> { self.chunks.get(&chunk_coord(x, y)) }
-    fn chunk_at_mut(&mut self, x: i32, y: i32) -> Option<&mut Chunk> { self.chunks.get_mut(&chunk_coord(x, y)) }
-
     pub fn mark_dirty(&mut self, x: i32, y: i32) { if self.in_bounds(x, y) { self.dirty_chunks.insert(chunk_coord(x, y)); } }
-    pub fn take_dirty_chunks(&mut self) -> Vec<Chunk> {
-        let v: Vec<Chunk> = self.dirty_chunks.iter().filter_map(|cc| self.chunks.get(cc).cloned()).collect();
-        self.dirty_chunks.clear(); v
-    }
     pub fn apply_chunks(&mut self, saved: Vec<Chunk>) { for c in saved { self.chunks.insert((c.cx, c.cy), c); } }
     pub fn all_chunks_cloned(&self) -> Vec<Chunk> { self.chunks.values().cloned().collect() }
 
-    pub fn idx(&self, _x: i32, _y: i32) -> usize { 0 }
     pub fn terrain(&self, x: i32, y: i32) -> TerrainKind { self.tile(x, y).map(|t| t.terrain_kind).unwrap_or(TerrainKind::Grass) }
     pub fn has_roof(&self, x: i32, y: i32) -> bool {
         if !self.in_bounds(x, y) { return false; }
