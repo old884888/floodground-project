@@ -80,7 +80,7 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
 
 fn handle_dead_key(app: &mut App, key: KeyEvent) {
     match key.code {
-        KeyCode::Char('q') | KeyCode::Char('Q') => app.should_quit = true,
+        KeyCode::Char('q') | KeyCode::Char('Q') => { app.quit_menu = true; }
         KeyCode::Char('r') | KeyCode::Char('R') => {
             // 调试用：玩家死了也能 Q 退，R 让殖民者接班（保留选择）
             if let Some(next) = next_alive_colonist(app) {
@@ -105,7 +105,7 @@ fn next_alive_colonist(app: &App) -> Option<hecs::Entity> {
 fn handle_camp_key(app: &mut App, key: KeyEvent) {
     match key.code {
         KeyCode::Tab => app.toggle_game_mode(),
-        KeyCode::Char('q') | KeyCode::Char('Q') => app.should_quit = true,
+        KeyCode::Char('q') | KeyCode::Char('Q') => { app.quit_menu = true; }
         _ => app.push_log("营地模式占位，按 Tab 回到冒险。".into()),
     }
 }
@@ -157,7 +157,7 @@ fn handle_adventure_key(app: &mut App, key: KeyEvent) {
             crate::systems::building::open_build_menu(app);
             app.push_log("打开建造菜单。↑↓选择，Enter确认，Esc取消。".into());
         }
-        KeyCode::Char('q') | KeyCode::Char('Q') => app.should_quit = true,
+        KeyCode::Char('q') | KeyCode::Char('Q') => { app.quit_menu = true; }
         KeyCode::Char('e') => {
             app.examine_dir_prompt = true;
             app.push_log("想看哪个方向？请按方向键。Esc取消。".into());
