@@ -9,28 +9,37 @@ const FLEE_SAFE_DIST: i32 = 15;
 const FLEE_HP_SOLO: f32 = 0.60;
 const FLEE_HP_PACK: f32 = 0.40;
 
-/// 狼群的优先攻击目标：玩家活着就追玩家；玩家死了追最近的活殖民者。
-fn primary_target(app: &App) -> Option<hecs::Entity> {
+/// 狼群的优先攻击目标：50%玩家/殖民者，30%猎物，20%闲逛
+fn primary_target(app: &App, rng: &mut impl Rng) -> Option<hecs::Entity> {
     if app.world.get::<&Dead>(app.player).is_err() {
         return Some(app.player);
     }
+    // 30% 追猎物
+    if rng.gen_bool(0.30) {
+        let (px, py) = app.player_pos();
+        let mut best: Option<(hecs::Entity, i32)> = None;
+        for (e, pos) in app.world.query::<&Position>().with::<&crate::components::Animal>().iter() {
+            let d = (pos.x - px).abs().max((pos.y - py).abs());
+            if d <= 15 && best.map(|(_, bd)| d < bd).unwrap_or(true) {
+                best = Some((e, d));
+            }
+        }
+        if let Some((e, _)) = best { return Some(e); }
+    }
+    // 50% 追玩家/殖民者
     let (px, py) = app.player_pos();
     let mut best: Option<(hecs::Entity, i32)> = None;
     for (e, pos) in app.world.query::<&Position>().with::<&Colonist>().iter() {
-        if app.world.get::<&Dead>(e).is_ok() {
-            continue;
-        }
+        if app.world.get::<&Dead>(e).is_ok() { continue; }
         let d = (pos.x - px).abs().max((pos.y - py).abs());
-        if best.map(|(_, bd)| d < bd).unwrap_or(true) {
-            best = Some((e, d));
-        }
+        if best.map(|(_, bd)| d < bd).unwrap_or(true) { best = Some((e, d)); }
     }
     best.map(|(e, _)| e)
 }
 
 pub fn update_combat(app: &mut App, rng: &mut impl Rng) {
-    // 狼群始终以「玩家角色」为优先目标（玩家死后改追殖民者）
-    let target = match primary_target(app) {
+    // Plan 11: 狼 30% 追猎物，50% 追玩家/殖民者
+    let target = match primary_target(app, rng) {
         Some(t) => t,
         None => return,
     };
@@ -89,6 +98,21 @@ pub fn update_combat(app: &mut App, rng: &mut impl Rng) {
             let attacker = app.visible_or_generic(entity, "什么东西");
             app.push_log(format!("{}咬了{}一口！", attacker, victim));
             if app.world.get::<&Health>(target).map(|h| h.hp <= 0.0).unwrap_or(false) {
+                // 猎物死亡 → 留尸体
+                let animal_kind = app.world.get::<&crate::components::Animal>(target).ok().map(|a| a.kind);
+                if let Some(kind) = animal_kind {
+                    let (tx, ty) = (px, py);
+                    let uid = app.next_uid; app.next_uid += 1;
+                    app.world.spawn((
+                        Position { x: tx, y: ty },
+                        crate::components::EntityUID(uid),
+                        crate::components::Corpse { animal: kind, spoilage: 90000 },
+                        crate::components::BlocksMovement,
+                    ));
+                    let _ = app.world.despawn(target);
+                    app.mark_spatial_dirty();
+                    continue;
+                }
                 let cause = if app.world.get::<&Player>(target).is_ok() {
                     "被狼咬死"
                 } else {
@@ -193,7 +217,7 @@ fn random_move(app: &mut App, entity: hecs::Entity, ex: i32, ey: i32, _px: i32, 
 
 fn try_move(app: &mut App, entity: hecs::Entity, ex: i32, ey: i32, dirs: &[(i32, i32)]) -> bool {
     // 提前查一次，别在方向循环里反复调 primary_target
-    let target_pos = primary_target(app)
+    let target_pos = primary_target(app, &mut rand::thread_rng())
         .and_then(|t| app.world.get::<&Position>(t).ok().map(|p| (p.x, p.y)));
     for &(dx, dy) in dirs {
         let nx = ex + dx;

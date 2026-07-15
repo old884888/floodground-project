@@ -1,5 +1,6 @@
 pub mod ai;
 pub mod building;
+pub mod butcher;
 pub mod debug_commands;
 pub mod combat;
 pub mod crafting;
@@ -12,6 +13,8 @@ pub mod interact;
 pub mod movement;
 pub mod nature;
 pub mod needs;
+pub mod prey_ai;
+pub mod prey_ecology;
 pub mod reaction;
 pub mod terrain_gen;
 pub mod weather;
@@ -109,6 +112,8 @@ pub fn run_tick(app: &mut App, rng: &mut impl rand::Rng) {
     }
     nature::update_bushes(app);
     terrain_gen::update_wolf_dens(app, rng);
+    prey_ecology::update_ecology(app, rng);
+    prey_ai::update_prey_ai(app, rng);
     combat::tick_visual_effects(app);
     tick_puddles(app, rng);
 

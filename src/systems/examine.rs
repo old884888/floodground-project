@@ -122,6 +122,10 @@ fn detect_menu(app: &App, x: i32, y: i32) -> ExamineMenu {
             return ExamineMenu::Action(ExamineAction::Torture);
         }
     }
+    // 尸体 → 屠宰
+    if app.world.query::<&Position>().with::<&crate::components::Corpse>().iter().any(|(_, p)| p.x == x && p.y == y) {
+        return ExamineMenu::Action(ExamineAction::Butcher);
+    }
     if pile_at(app, x, y).is_some() {
         return ExamineMenu::Pile;
     }
@@ -241,6 +245,7 @@ pub fn action_label(action: ExamineAction) -> &'static str {
         ExamineAction::SleepPitShelter => "睡觉",
         ExamineAction::BreakWall => "砸墙",
         ExamineAction::Drink => "喝水",
+        ExamineAction::Butcher => "屠宰",
     }
 }
 
@@ -255,14 +260,15 @@ pub fn action_to_lock(app: &mut App, action: ExamineAction) {
     let dy = ty - py;
     let is_sleep = matches!(action, ExamineAction::SleepBed | ExamineAction::SleepLeanTo | ExamineAction::SleepPitShelter);
     let is_drink = matches!(action, ExamineAction::Drink);
-    if dx == 0 && dy == 0 && !is_sleep && !is_drink {
+    let is_butcher = matches!(action, ExamineAction::Butcher);
+    if dx == 0 && dy == 0 && !is_sleep && !is_drink && !is_butcher {
         app.push_log("你没法对自己这么做。".into());
         close(app);
         return;
     }
     if dx.abs() > 1 || dy.abs() > 1 || dx.abs() + dy.abs() > 1 {
-        if (dx == 0 && dy == 0 && is_sleep) || is_drink {
-            // OK — sleeping/drinking at own or adjacent tile
+        if (dx == 0 && dy == 0 && is_sleep) || is_drink || is_butcher {
+            // OK — sleeping/drinking/butchering at own or adjacent tile
         } else {
             app.push_log("太远了。".into());
             close(app);
@@ -271,6 +277,13 @@ pub fn action_to_lock(app: &mut App, action: ExamineAction) {
     }
 
     match action {
+        ExamineAction::Butcher => {
+            close(app);
+            let mut rng = rand::thread_rng();
+            if !crate::systems::butcher::try_butcher(app, tx, ty, &mut rng) {
+                app.push_log("无法屠宰——需要手持刀并站在尸体旁边。".into());
+            }
+        }
         ExamineAction::OpenDoor | ExamineAction::CloseDoor => {
             close(app);
             toggle_door(app, tx, ty);

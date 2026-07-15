@@ -284,6 +284,7 @@ pub enum ExamineAction {
     SleepPitShelter,
     BreakWall,
     Drink,
+    Butcher,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

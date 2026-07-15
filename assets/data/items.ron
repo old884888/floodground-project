@@ -30,4 +30,11 @@
     "clay":        ( name: "黏土",    glyph: 'c',  color: "yellow",   desc: "一团湿漉漉的黏土，从沼泽里抠出来的。以后能烧砖——现在只能攥在手里当镇纸。" ),
     "metal_ore":   ( name: "金属矿",  glyph: 'm',  color: "gray",     desc: "一块沉甸甸的矿石，断口有金属光泽。等你有炉子再说——现在它只是块更值钱的石头。" ),
     "poison_mush": ( name: "毒蘑菇",  glyph: 'p',  color: "magenta",  desc: "一丛颜色鲜艳的蘑菇。鲜艳通常意味着'别碰'——但你揣兜里也没人拦你。v1 吃不了。" ),
+    "raw_meat":    ( name: "生肉",    glyph: 'm',  color: "red",      desc: "一块血淋淋的生肉。直接吃能填肚子——但你大概率会后悔。烤熟了再吃，或者等发臭了喂俘虏。" ),
+    "cooked_meat": ( name: "熟肉",    glyph: 'M',  color: "yellow",   desc: "一块烤得焦香的肉——篝火的恩赐。人类学会用火之后吃的第一顿热饭，大概就长这样。" ),
+    "smoked_meat": ( name: "烟熏肉",  glyph: 'M',  color: "yellow",   desc: "熏得发红发黑的一条肉干。能存很久——够撑过整个冬天。旧石器时代的末日储备。" ),
+    "leather":     ( name: "皮",      glyph: 'd',  color: "yellow",   desc: "一张处理过的兽皮。以后能缝衣服、做皮甲——现在攥手里当毯子。总比树叶强。" ),
+    "rough_leather":(name: "粗皮",    glyph: 'd',  color: "gray",     desc: "一张粗糙的毛皮，从狼身上剥下来的。保暖还行——但扎手。穿上去会痒得想死。" ),
+    "fat":         ( name: "脂肪",    glyph: 'f',  color: "white",    desc: "一块白花花的油脂。烤了能吃——以后还能熬油点灯。野猪的脂肪最肥，鹿几乎不带膘。" ),
+    "rotten_meat": ( name: "腐肉",    glyph: 'm',  color: "magenta",  desc: "一块发臭的烂肉。苍蝇围着转。吃了大概率拉肚子——除非你真他妈山穷水尽了。" ),
 }

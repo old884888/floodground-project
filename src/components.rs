@@ -281,6 +281,8 @@ pub enum ItemKind {
     Clay,
     MetalOre,
     PoisonMush,
+    // Plan 11
+    RawMeat, CookedMeat, SmokedMeat, Leather, RoughLeather, Fat, RottenMeat,
 }
 
 impl ItemKind {
@@ -672,6 +674,23 @@ pub enum ComponentSnapshot {
     StatusEffect { kind: EffectKind, remaining: u32 },
     TraitTag(String),
 }
+
+// ── Plan 11 狩猎与食物 ──
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum AnimalKind { Deer, Boar, Rabbit }
+
+/// 猎物标记
+#[derive(Debug, Clone, Copy)]
+pub struct Animal { pub kind: AnimalKind, pub adult: bool }
+
+/// 尸体：glyph % 红色，肉/骨/皮在里面
+#[derive(Debug, Clone, Copy)]
+pub struct Corpse { pub animal: AnimalKind, pub spoilage: u32 }
+
+/// 腐败组件：带 spoilage 的东西（肉/尸体），归零变质
+#[derive(Debug, Clone, Copy)]
+pub struct Perishable { pub spoilage: u32, pub total: u32 }
 
 #[cfg(test)]
 mod tests {
