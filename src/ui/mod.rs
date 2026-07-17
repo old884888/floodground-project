@@ -13,7 +13,7 @@ use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 use ratatui::Frame;
 
 use crate::app::{App, Screen};
-use crate::components::{DamageNumber, HitFlash, Position};
+use crate::components::{DamageNumber, HitFlash};
 use crate::entity_kind::EntityKind;
 
 pub fn draw(frame: &mut Frame, app: &mut App) {
@@ -173,11 +173,6 @@ fn draw_help(frame: &mut Frame, app: &App, area: Rect) {
     };
     let help = Paragraph::new(text).style(Style::default().fg(Color::DarkGray));
     frame.render_widget(help, area);
-}
-
-#[allow(dead_code)]
-pub fn cycle_selection(app: &mut App) {
-    app.cycle_character();
 }
 
 pub fn entity_glyph(app: &App, entity: hecs::Entity) -> (char, Color) {
@@ -378,23 +373,3 @@ fn draw_loading(frame: &mut Frame, app: &App) {
     frame.render_widget(widget, popup);
 }
 
-#[allow(dead_code)]
-pub fn entities_in_view(
-    app: &App,
-    cam_x: i32,
-    cam_y: i32,
-    view_w: i32,
-    view_h: i32,
-) -> Vec<(i32, i32, hecs::Entity)> {
-    let mut out = Vec::new();
-    for (e, pos) in app.world.query::<&Position>().iter() {
-        if pos.x >= cam_x
-            && pos.y >= cam_y
-            && pos.x < cam_x + view_w
-            && pos.y < cam_y + view_h
-        {
-            out.push((pos.x, pos.y, e));
-        }
-    }
-    out
-}

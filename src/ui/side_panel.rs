@@ -129,7 +129,22 @@ fn draw_tab_character(app: &App) -> Vec<Line<'static>> {
                         Style::default().fg(Color::Rgb(180, 100, 50)),
                     )));
                 }
+                if eff.kind == EffectKind::Poison {
+                    let ticks_left = eff.remaining;
+                    let hours = ticks_left as f32 / 1200.0;
+                    lines.push(Line::from(Span::styled(
+                        format!("☠ 蛇毒 剩 {:.1}h", hours),
+                        Style::default().fg(Color::Rgb(80, 160, 60)),
+                    )));
+                }
             }
+        }
+        // 衣物
+        if let Ok(c) = app.world.get::<&crate::components::Clothing>(entity) {
+            lines.push(Line::from(Span::styled(
+                format!("衣物: {} +{:.0}", c.item.label(), c.warmth),
+                Style::default().fg(Color::Rgb(180, 140, 80)),
+            )));
         }
         if let Ok(c) = app.world.get::<&Captive>(entity) {
             lines.push(bar_line("意志", c.will, 100.0, Color::Magenta));
@@ -218,8 +233,9 @@ fn draw_tab_hands(app: &App) -> Vec<Line<'static>> {
     )));
     lines.push(Line::from(".草 ~水 ,营 T树 A岩"));
     lines.push(Line::from("%果 ^火 @你 C民 p俘"));
-        lines.push(Line::from("/=木棍 o石 =木头"));
-        lines.push(Line::from("w狼"));
+    lines.push(Line::from("/=木棍 o石 =木头"));
+    lines.push(Line::from("w狼 b熊 s蛇 D鹿 B猪"));
+    lines.push(Line::from(":耕地 %熟果 ,种子"));
 
     let _ = has_pile;
     lines

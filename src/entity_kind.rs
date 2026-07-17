@@ -17,8 +17,8 @@ pub enum EntityKind {
     Player,
     Colonist,
     Captive,
-    Hostile,
-    HostileFleeing,
+    Hostile(EnemyKind),
+    HostileFleeing(EnemyKind),
     Door(bool),
     StoneWall,
     WoodWall,
@@ -42,6 +42,7 @@ pub enum EntityKind {
     Bramble,                      // 荆棘藤
     Prey(AnimalKind),             // 猎物
     Corpse,                       // 尸体
+    Farmland(Option<CropStage>),  // 耕地（含作物阶段）
     Named(String),                // 兜底
 }
 
@@ -57,10 +58,11 @@ impl EntityKind {
             return EntityKind::Captive;
         }
         if app.world.get::<&Hostile>(e).is_ok() {
+            let kind = app.world.get::<&Enemy>(e).map(|en| en.kind).unwrap_or(EnemyKind::Wolf);
             if app.world.get::<&Fleeing>(e).is_ok() {
-                return EntityKind::HostileFleeing;
+                return EntityKind::HostileFleeing(kind);
             }
-            return EntityKind::Hostile;
+            return EntityKind::Hostile(kind);
         }
         if let Ok(door) = app.world.get::<&Door>(e) {
             return EntityKind::Door(door.open);
@@ -117,6 +119,10 @@ impl EntityKind {
         if app.world.get::<&SmokingRack>(e).is_ok() {
             return EntityKind::SmokingRack;
         }
+        if app.world.get::<&Farmland>(e).is_ok() {
+            let stage = app.world.get::<&Crop>(e).map(|c| c.stage).ok();
+            return EntityKind::Farmland(stage);
+        }
         if app.world.get::<&DirtRoad>(e).is_ok() {
             return EntityKind::DirtRoad;
         }
@@ -144,7 +150,7 @@ impl EntityKind {
         match self {
             EntityKind::Player => 100,
             EntityKind::Colonist | EntityKind::Captive => 90,
-            EntityKind::Hostile | EntityKind::HostileFleeing => 89,
+            EntityKind::Hostile(_) | EntityKind::HostileFleeing(_) => 89,
             EntityKind::Campfire => 80,
             EntityKind::Door(_) | EntityKind::Window => 60,
             EntityKind::WoodWall | EntityKind::StoneWall => 55,
@@ -159,6 +165,7 @@ impl EntityKind {
             EntityKind::LeanTo | EntityKind::PitShelter => 50,
             EntityKind::SmokingRack => 30,
             EntityKind::Bramble => 28,
+            EntityKind::Farmland(_) => 22,
             EntityKind::Prey(_) => 70,
             EntityKind::Corpse => 15,
             EntityKind::DirtRoad | EntityKind::StoneRoad => 4,
@@ -173,7 +180,11 @@ impl EntityKind {
             EntityKind::Player => ('@', Color::White),
             EntityKind::Colonist => ('C', Color::Cyan),
             EntityKind::Captive => ('p', Color::Magenta),
-            EntityKind::Hostile | EntityKind::HostileFleeing => ('w', Color::Red),
+            EntityKind::Hostile(kind) | EntityKind::HostileFleeing(kind) => match kind {
+                EnemyKind::Wolf => ('w', Color::Red),
+                EnemyKind::Bear => ('b', Color::Rgb(139, 90, 43)),
+                EnemyKind::Snake => ('s', Color::Rgb(80, 160, 60)),
+            },
             EntityKind::Door(open) => (
                 if *open { '/' } else { '+' },
                 Color::Yellow,
@@ -200,6 +211,13 @@ impl EntityKind {
             EntityKind::PitShelter => ('▼', Color::Rgb(100, 80, 40)),
             EntityKind::SmokingRack => ('╤', Color::Rgb(100, 70, 30)),
             EntityKind::Bramble => ('&', Color::Rgb(100, 140, 40)),
+            EntityKind::Farmland(stage) => match stage {
+                None => (':', Color::Rgb(120, 80, 40)),       // 翻好的空地
+                Some(CropStage::Seed) => ('.', Color::Rgb(100, 140, 50)),
+                Some(CropStage::Sprout) => ('"', Color::Rgb(120, 180, 60)),
+                Some(CropStage::Growing) => ('i', Color::Rgb(80, 200, 80)),
+                Some(CropStage::Ripe) => ('%', Color::Rgb(220, 60, 60)),
+            },
             EntityKind::Prey(AnimalKind::Deer) => ('D', Color::Rgb(180, 140, 80)),
             EntityKind::Prey(AnimalKind::Boar) => ('B', Color::Rgb(150, 60, 30)),
             EntityKind::Prey(AnimalKind::Rabbit) => ('r', Color::Rgb(180, 180, 180)),

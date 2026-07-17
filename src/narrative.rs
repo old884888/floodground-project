@@ -68,12 +68,14 @@ pub fn format_event(app: &mut App, event: &GameEvent) -> Option<String> {
             if Some(*entity) != app.actor() { return None; }
             match kind {
                 EffectKind::Diarrhea => Some("肚子一阵绞痛——那水不对劲。".into()),
+                EffectKind::Poison => Some("毒素在血管里蔓延——你觉得浑身发冷。".into()),
             }
         }
         GameEvent::StatusEffectRemoved { entity, kind } => {
             if Some(*entity) != app.actor() { return None; }
             match kind {
                 EffectKind::Diarrhea => Some("肚子终于消停了。".into()),
+                EffectKind::Poison => Some("蛇毒退了——命硬。".into()),
             }
         }
         // Torture / Mood / Move 已在对应 system 里直接打日志，避免重复

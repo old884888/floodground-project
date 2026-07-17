@@ -6,7 +6,7 @@
 use rand::Rng;
 
 use crate::app::App;
-use crate::components::{Hostile, MoveCooldown, Name, Position, WolfDen};
+use crate::components::{Enemy, EnemyKind, Hostile, MoveCooldown, Name, Position, WolfDen};
 use crate::world::MAP_WIDTH;
 
 const WOLF_DEN_SPAWN_RADIUS: i32 = 15;
@@ -56,6 +56,7 @@ pub fn update_wolf_dens(app: &mut App, rng: &mut impl Rng) {
                 Position { x, y },
                 Name("狼".into()),
                 Hostile,
+                Enemy { kind: EnemyKind::Wolf },
                 crate::components::Health {
                     hp: 50.0,
                     max_hp: 50.0,

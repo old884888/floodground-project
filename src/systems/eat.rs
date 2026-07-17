@@ -57,13 +57,6 @@ fn item_to_food_key(kind: ItemKind) -> String {
     kind.key().to_string()
 }
 
-/// 副手吃（占位，以后做选左手还是右手吃）
-#[allow(dead_code)]
-pub fn try_eat_offhand(app: &mut App, hand: bool) {
-    try_eat(app);
-    let _ = hand;
-}
-
 pub fn _food_map(app: &App) -> &FoodMap {
     &app.food_data
 }

@@ -40,13 +40,14 @@ pub fn close(app: &mut App) {
     app.examine = None;
 }
 
-/// 面朝方向的目标格；默认朝南
+/// 面朝方向的目标格（预留：快捷交互键，如 F 键查看前方）
 #[allow(dead_code)]
 pub fn facing_target(app: &App) -> (i32, i32) {
     let (px, py) = app.actor_pos();
     (px + app.facing.0, py + app.facing.1)
 }
 
+/// 打开面朝方向的格子的检查菜单（预留：快捷交互键）
 #[allow(dead_code)]
 pub fn open_facing(app: &mut App) {
     open_at(app, facing_target(app).0, facing_target(app).1);

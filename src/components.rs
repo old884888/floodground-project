@@ -93,6 +93,7 @@ impl TerrainKind {
         self.into()
     }
 
+    /// 从字符串反查地形种类（预留：存档校验/调试命令行）
     #[allow(dead_code)]
     pub fn from_key(s: &str) -> Option<Self> {
         use std::str::FromStr;
@@ -283,6 +284,8 @@ pub enum ItemKind {
     PoisonMush,
     // Plan 11
     RawMeat, CookedMeat, SmokedMeat, Leather, RoughLeather, Fat, RottenMeat,
+    // Plan 种植
+    Seed,
 }
 
 impl ItemKind {
@@ -314,10 +317,15 @@ impl Pile {
         if count == 0 {
             return true;
         }
-        if let Some(slot) = self.slots.iter_mut().find(|s| s.item == item) {
-            slot.count = slot.count.saturating_add(count);
-            return true;
+        let stackable = crate::data::item_def(item.key()).stackable;
+        if stackable {
+            // 材料：合并同种
+            if let Some(slot) = self.slots.iter_mut().find(|s| s.item == item) {
+                slot.count = slot.count.saturating_add(count);
+                return true;
+            }
         }
+        // 工具（或不叠加材料）：永远新 slot
         if self.slots.len() >= MAX_PILE_SLOTS {
             return false;
         }
@@ -368,20 +376,27 @@ impl Hands {
         self.left.is_none() && self.right.is_none()
     }
 
+    /// 双手是否已满（预留：捡取前检查）
     #[allow(dead_code)]
     pub fn is_full(&self) -> bool {
         self.left.is_some() && self.right.is_some()
     }
 
-    /// 能否再塞这种物品（空手或同种可叠）
+    /// 能否再塞这种物品（空手或同种可叠）。工具每手至多一把。
     pub fn can_take(&self, item: ItemKind) -> bool {
+        let stackable = crate::data::item_def(item.key()).stackable;
+        if !stackable {
+            // 工具：必须有空手
+            return self.left.is_none() || self.right.is_none();
+        }
+        // 材料：空手或同种可叠
         match (self.left, self.right) {
             (None, _) | (_, None) => true,
             (Some((l, _)), Some((r, _))) => l == item || r == item,
         }
     }
 
-    /// 塞进空手或叠到同种手；满且无同种返回 false
+    /// 塞进空手或叠到同种手 1 个（预留：快捷捡取单件）
     #[allow(dead_code)]
     pub fn take(&mut self, item: ItemKind) -> bool {
         self.take_n(item, 1) == 1
@@ -391,17 +406,20 @@ impl Hands {
         if n == 0 {
             return 0;
         }
-        // 优先叠同种
-        if let Some((kind, count)) = self.left.as_mut() {
-            if *kind == item {
-                *count = count.saturating_add(n);
-                return n;
+        // 材料才叠同种，工具每手独立
+        let stackable = crate::data::item_def(item.key()).stackable;
+        if stackable {
+            if let Some((kind, count)) = self.left.as_mut() {
+                if *kind == item {
+                    *count = count.saturating_add(n);
+                    return n;
+                }
             }
-        }
-        if let Some((kind, count)) = self.right.as_mut() {
-            if *kind == item {
-                *count = count.saturating_add(n);
-                return n;
+            if let Some((kind, count)) = self.right.as_mut() {
+                if *kind == item {
+                    *count = count.saturating_add(n);
+                    return n;
+                }
             }
         }
         if self.left.is_none() {
@@ -439,7 +457,14 @@ impl Hands {
     pub fn format_hand(slot: Option<(ItemKind, u32)>) -> String {
         match slot {
             None => "空".into(),
-            Some((item, n)) => format!("{} ×{}", item.label(), n),
+            Some((item, n)) => {
+                let def = crate::data::item_def(item.key());
+                if def.max_durability.is_some() {
+                    format!("{} {}/{}", item.label(), n, def.max_durability.unwrap())
+                } else {
+                    format!("{} ×{}", item.label(), n)
+                }
+            }
         }
     }
 }
@@ -566,10 +591,10 @@ pub struct BodyTemp {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EffectKind {
     Diarrhea,   // 腹泻：口渴×1.5, 心情−10
+    Poison,     // 蛇毒：每 80 tick −1 HP, 心情 −5
     // 预留：
     // Bleeding,
     // Infection,
-    // Poison,
 }
 
 /// 持续效果：挂在角色身上，每 tick 递减 remaining，归零自动移除
@@ -584,7 +609,6 @@ pub struct StatusEffect {
 pub struct Puddle;
 
 impl Wet {
-    #[allow(dead_code)]
     pub fn clamp(&mut self) {
         self.value = self.value.clamp(0.0, 100.0);
     }
@@ -603,7 +627,6 @@ impl Wet {
     }
 
     /// 精力衰减乘数（加在现有速率上）
-    #[allow(dead_code)]
     pub fn energy_penalty(self) -> f32 {
         if self.value <= 50.0 {
             0.0
@@ -615,7 +638,6 @@ impl Wet {
     }
 
     /// 心情惩罚
-    #[allow(dead_code)]
     pub fn mood_penalty(self) -> f32 {
         if self.value <= 20.0 {
             0.0
@@ -635,7 +657,10 @@ impl Wet {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct EntityUID(pub u64);
 
-/// 组件快照：存档时每个组件的序列化形态
+/// 组件快照：存档时每个组件的序列化形态。
+///
+/// ⚠️ 新增标记组件（无字段的）时请同时更新 `snapshot_macro.rs` 中的列表，
+/// 以确保 save.rs 的序列化代码自动覆盖新组件。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ComponentSnapshot {
     Position { x: i32, y: i32 },
@@ -673,6 +698,10 @@ pub enum ComponentSnapshot {
     CraftWip { recipe_index: usize, progress: u32 },
     StatusEffect { kind: EffectKind, remaining: u32 },
     TraitTag(String),
+    Enemy { kind: EnemyKind },
+    Clothing { item: ItemKind, warmth: f32 },
+    Farmland,
+    Crop { stage: CropStage, growth: u32 },
 }
 
 // ── Plan 11 狩猎与食物 ──
@@ -683,6 +712,47 @@ pub enum AnimalKind { Deer, Boar, Rabbit }
 /// 猎物标记
 #[derive(Debug, Clone, Copy)]
 pub struct Animal { pub kind: AnimalKind, pub adult: bool }
+
+/// 敌人种类（狼/熊/蛇）
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum EnemyKind { Wolf, Bear, Snake }
+
+/// 敌人标记：区分 Hostile 的具体种类，驱动 combat 参数化
+#[derive(Debug, Clone, Copy)]
+pub struct Enemy { pub kind: EnemyKind }
+
+/// 穿着的衣物：保暖值加到 env_temperature
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct Clothing {
+    pub item: ItemKind,
+    pub warmth: f32,
+}
+
+/// 可穿戴物品的保暖值；不可穿戴返回 None
+pub fn clothing_warmth(item: ItemKind) -> Option<f32> {
+    match item {
+        ItemKind::Leather => Some(15.0),
+        ItemKind::RoughLeather => Some(8.0),
+        _ => None,
+    }
+}
+
+// ── 种植系统 ──
+
+/// 作物生长阶段
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CropStage { Seed, Sprout, Growing, Ripe }
+
+/// 耕地标记：此格已翻土，可播种
+#[derive(Debug, Clone, Copy)]
+pub struct Farmland;
+
+/// 作物：挂在 Farmland 实体上，growth 按 tick 递增推动 stage
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct Crop {
+    pub stage: CropStage,
+    pub growth: u32,
+}
 
 /// 尸体：glyph % 红色，肉/骨/皮在里面
 #[derive(Debug, Clone, Copy)]

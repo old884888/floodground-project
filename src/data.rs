@@ -141,7 +141,18 @@ pub struct ItemDef {
     pub glyph: char,
     pub color: String,
     pub desc: String,
+    /// false=工具（不叠加，count=耐久），默认 true=材料（正常叠加）
+    #[serde(default = "default_stackable")]
+    pub stackable: bool,
+    /// 工具的新品耐久值（None=非工具）
+    #[serde(default)]
+    pub max_durability: Option<u32>,
+    /// 工具单次使用的磨损范围 (lo, hi)（None=无磨损）
+    #[serde(default)]
+    pub wear_per_use: Option<(u32, u32)>,
 }
+
+fn default_stackable() -> bool { true }
 
 pub type ItemDefMap = HashMap<String, ItemDef>;
 
@@ -166,6 +177,9 @@ pub fn item_def(key: &str) -> &ItemDef {
                 glyph: '?',
                 color: "white".into(),
                 desc: "一件你完全认不出来的东西。".into(),
+                stackable: true,
+                max_durability: None,
+                wear_per_use: None,
             })
         })
 }

@@ -1,12 +1,13 @@
 pub mod ai;
 pub mod building;
 pub mod butcher;
-pub mod debug_commands;
 pub mod combat;
 pub mod crafting;
 pub mod dark;
+pub mod debug_commands;
 pub mod eat;
 pub mod examine;
+pub mod farming;
 pub mod harvest;
 pub mod input;
 pub mod interact;
@@ -114,6 +115,7 @@ pub fn run_tick(app: &mut App, rng: &mut impl rand::Rng) {
     terrain_gen::update_wolf_dens(app, rng);
     prey_ecology::update_ecology(app, rng);
     prey_ai::update_prey_ai(app, rng);
+    farming::update_crops(app);
     combat::tick_visual_effects(app);
     tick_puddles(app, rng);
 

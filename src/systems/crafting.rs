@@ -770,6 +770,14 @@ fn finish_crafting(app: &mut App, entity: hecs::Entity, recipe_index: usize, rng
         return;
     }
 
+    // ── 工具耐久：新工具 count = max_durability ──
+    let def = crate::data::item_def(result_item.key());
+    if !def.stackable {
+        if let Some(max_dur) = def.max_durability {
+            result_count = max_dur;
+        }
+    }
+
     // 产物进手
     let took = try_put_in_hands(app, result_item, result_count);
 

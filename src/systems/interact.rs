@@ -1,7 +1,7 @@
 use crate::app::App;
-use crate::components::{Hands, Position};
+use crate::components::{Clothing, Hands, Position};
 use crate::events::GameEvent;
-use crate::items::{drop_item_near, has_pile};
+use crate::items::{drop_item_near, has_pile, place_item};
 
 pub fn try_grab(app: &mut App, rng: &mut impl rand::Rng) {
     let Some(actor) = app.actor() else {
@@ -73,4 +73,62 @@ pub fn try_drop(app: &mut App) {
         let who = app.entity_label(actor);
         app.push_log(format!("{}把{}丢了出去。", who, item.label()));
     }
+}
+
+/// 穿/脱衣物（o 键）：
+/// - 已穿 → 脱下丢到脚下
+/// - 手上有可穿戴皮 → 穿上（从手移到 Clothing）
+/// - 都没有 → 提示
+pub fn try_wear(app: &mut App) {
+    use crate::components::clothing_warmth;
+    let Some(actor) = app.actor() else {
+        app.push_log("没有能动的人。".into());
+        return;
+    };
+    let (px, py) = {
+        let Ok(pos) = app.world.get::<&Position>(actor) else { return };
+        (pos.x, pos.y)
+    };
+
+    // 已穿 → 脱下
+    if app.world.get::<&Clothing>(actor).is_ok() {
+        let old = {
+            let c = app.world.get::<&Clothing>(actor).map(|c| *c).unwrap();
+            c
+        };
+        let _ = app.world.remove_one::<Clothing>(actor);
+        place_item(app, px, py, old.item, 1);
+        let who = app.entity_label(actor);
+        app.push_log(format!("{}脱下了{}。", who, old.item.label()));
+        return;
+    }
+
+    // 手上有可穿戴 → 穿上
+    let wearable = {
+        let Ok(hands) = app.world.get::<&Hands>(actor) else {
+            app.push_log("你连手都没有。".into());
+            return;
+        };
+        let left = hands.left.and_then(|(k, _)| clothing_warmth(k).map(|w| (k, w, false)));
+        let right = hands.right.and_then(|(k, _)| clothing_warmth(k).map(|w| (k, w, true)));
+        right.or(left)
+    };
+
+    let Some((item, warmth, from_right)) = wearable else {
+        app.push_log("手上没有能穿的东西——皮或者粗皮才行。".into());
+        return;
+    };
+
+    // 从手移除 1 件
+    {
+        let Ok(mut hands) = app.world.get::<&mut Hands>(actor) else { return };
+        let slot = if from_right { &mut hands.right } else { &mut hands.left };
+        if let Some((_kind, count)) = slot.as_mut() {
+            *count -= 1;
+            if *count == 0 { *slot = None; }
+        }
+    }
+    let _ = app.world.insert_one(actor, Clothing { item, warmth });
+    let who = app.entity_label(actor);
+    app.push_log(format!("{}披上了{}——暖和多了。", who, item.label()));
 }

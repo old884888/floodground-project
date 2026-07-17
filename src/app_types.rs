@@ -40,7 +40,7 @@ pub const DEBUG_ITEMS: &[&str] = &[
     "刷地形物品 ▶",
 ];
 
-pub const SPAWN_ITEMS: &[&str] = &["狼", "殖民者", "俘虏"];
+pub const SPAWN_ITEMS: &[&str] = &["狼", "熊", "蛇", "殖民者", "俘虏"];
 
 pub const TOOL_ITEMS: &[&str] = &["石刀", "削尖棍", "矛", "石斧", "火把"];
 
@@ -54,7 +54,7 @@ pub const DEBUG_TIME_ITEMS: &[&str] = &["黎明", "白天", "黄昏", "夜晚"];
 pub const DEBUG_WEATHER_ITEMS: &[&str] = &["晴", "阴", "毛毛雨", "中雨", "暴雨", "雷阵雨"];
 pub const DEBUG_TERRAIN_ITEMS: &[&str] = &[
     "草药", "黏土", "金属矿", "毒蘑菇", "草药植株", "狼巢穴",
-    "树枝", "树叶", "长木棍", "藤条", "绳子", "石片", "大石片", "骨头",
+    "树枝", "树叶", "长木棍", "藤条", "绳子", "石片", "大石片", "骨头", "种子",
 ];
 
 pub const DEBUG_ITEM_COUNT: usize = DEBUG_ITEMS.len();

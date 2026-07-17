@@ -130,6 +130,8 @@ impl App {
             spatial_init.blockers.insert((pos.x, pos.y), true);
         }
         spawn_wolves(&mut world, &map, &spatial_init, rng);
+        spawn_bears(&mut world, &map, &spatial_init, rng);
+        spawn_snakes(&mut world, &map, &spatial_init, rng);
 
         let mut names = actors.names.clone();
         names.shuffle(rng);
@@ -188,6 +190,7 @@ impl App {
             },
             Name(c1_name),
             Colonist,
+            Hands::default(),
             Health {
                 hp: 100.0,
                 max_hp: 100.0,
@@ -227,6 +230,7 @@ impl App {
             },
             Name(c2_name),
             Colonist,
+            Hands::default(),
             Health {
                 hp: 100.0,
                 max_hp: 100.0,
@@ -1102,6 +1106,7 @@ fn spawn_wolves(world: &mut World, map: &GameMap, spatial: &SpatialIndex, rng: &
                 Position { x, y },
                 Name("狼".into()),
                 Hostile,
+                Enemy { kind: EnemyKind::Wolf },
                 Health {
                     hp: 50.0,
                     max_hp: 50.0,
@@ -1111,5 +1116,63 @@ fn spawn_wolves(world: &mut World, map: &GameMap, spatial: &SpatialIndex, rng: &
             ));
             spawned += 1;
         }
+    }
+}
+
+/// 在丘陵/密林生成 2-3 只独居熊
+fn spawn_bears(world: &mut World, map: &GameMap, spatial: &SpatialIndex, rng: &mut impl Rng) {
+    use crate::components::TerrainKind;
+    const BEAR_COUNT: u32 = 3;
+    const MIN_CAMP_DIST: i32 = 35;
+    let mut spawned = 0u32;
+    for _ in 0..400 {
+        if spawned >= BEAR_COUNT { break; }
+        let x = rng.gen_range(0..crate::world::MAP_WIDTH);
+        let y = rng.gen_range(0..crate::world::MAP_HEIGHT);
+        if (x - CAMP_CX).abs().max((y - CAMP_CY).abs()) < MIN_CAMP_DIST { continue; }
+        if !map.is_walkable(x, y) { continue; }
+        if spatial.by_tile.contains_key(&(x, y)) { continue; }
+        // 熊偏好丘陵和密林
+        let t = map.terrain(x, y);
+        if !matches!(t, TerrainKind::Hill | TerrainKind::DenseForest | TerrainKind::LightForest) { continue; }
+        world.spawn((
+            Position { x, y },
+            Name("熊".into()),
+            Hostile,
+            Enemy { kind: EnemyKind::Bear },
+            Health { hp: 150.0, max_hp: 150.0 },
+            Wet { value: 0.0 },
+            MoveCooldown { ticks: 0 },
+        ));
+        spawned += 1;
+    }
+}
+
+/// 在浅沼/沙地生成 3-5 条蛇
+fn spawn_snakes(world: &mut World, map: &GameMap, spatial: &SpatialIndex, rng: &mut impl Rng) {
+    use crate::components::TerrainKind;
+    const SNAKE_COUNT: u32 = 5;
+    const MIN_CAMP_DIST: i32 = 25;
+    let mut spawned = 0u32;
+    for _ in 0..400 {
+        if spawned >= SNAKE_COUNT { break; }
+        let x = rng.gen_range(0..crate::world::MAP_WIDTH);
+        let y = rng.gen_range(0..crate::world::MAP_HEIGHT);
+        if (x - CAMP_CX).abs().max((y - CAMP_CY).abs()) < MIN_CAMP_DIST { continue; }
+        if !map.is_walkable(x, y) { continue; }
+        if spatial.by_tile.contains_key(&(x, y)) { continue; }
+        // 蛇偏好浅沼和沙地
+        let t = map.terrain(x, y);
+        if !matches!(t, TerrainKind::ShallowMarsh | TerrainKind::Sand | TerrainKind::LightForest) { continue; }
+        world.spawn((
+            Position { x, y },
+            Name("蛇".into()),
+            Hostile,
+            Enemy { kind: EnemyKind::Snake },
+            Health { hp: 25.0, max_hp: 25.0 },
+            Wet { value: 0.0 },
+            MoveCooldown { ticks: 0 },
+        ));
+        spawned += 1;
     }
 }

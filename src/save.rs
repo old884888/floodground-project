@@ -105,19 +105,14 @@ pub fn load_game() -> Result<(SaveData, World, HashMap<u64, Entity>), String> {
 
 fn collect_components(world: &World, uid: u64, uid_map: &HashMap<Entity, u64>, out: &mut Vec<ComponentSnapshot>) {
     use ComponentSnapshot::*;
-    // Find entity by UID
     let e = world.query::<&EntityUID>().iter()
         .find(|(_, u)| u.0 == uid).map(|(e, _)| e);
     let Some(e) = e else { return };
-    let _ = usize::default(); // suppress unused
 
+    // ── 值组件（字段结构不同，逐个手写） ──
     if let Ok(p) = world.get::<&comp::Position>(e) { out.push(Position { x: p.x, y: p.y }); }
     if let Ok(n) = world.get::<&comp::Name>(e) { out.push(Name(n.0.clone())); }
-    if world.get::<&comp::Player>(e).is_ok() { out.push(Player); }
-    if world.get::<&comp::Colonist>(e).is_ok() { out.push(Colonist); }
     if let Ok(c) = world.get::<&comp::Captive>(e) { out.push(Captive { will: c.will }); }
-    if world.get::<&comp::Hostile>(e).is_ok() { out.push(Hostile); }
-    if world.get::<&comp::Dead>(e).is_ok() { out.push(Dead); }
     if let Ok(h) = world.get::<&comp::Health>(e) { out.push(Health { hp: h.hp, max_hp: h.max_hp }); }
     if let Ok(h) = world.get::<&comp::Hunger>(e) { out.push(Hunger { value: h.value }); }
     if let Ok(t) = world.get::<&comp::Thirst>(e) { out.push(Thirst { value: t.value }); }
@@ -126,16 +121,28 @@ fn collect_components(world: &World, uid: u64, uid_map: &HashMap<Entity, u64>, o
     if let Ok(b) = world.get::<&comp::BodyTemp>(e) { out.push(BodyTemp { value: b.value }); }
     if let Ok(w) = world.get::<&comp::Wet>(e) { out.push(Wet { value: w.value }); }
     if let Ok(mc) = world.get::<&comp::MoveCooldown>(e) { out.push(MoveCooldown { ticks: mc.ticks }); }
-    if world.get::<&comp::Fleeing>(e).is_ok() { out.push(Fleeing); }
     if let Ok(ai) = world.get::<&comp::AiState>(e) { out.push(AiState { current: ai.current }); }
     if let Ok(h) = world.get::<&comp::Hands>(e) { out.push(Hands { left: h.left, right: h.right }); }
     if let Ok(hv) = world.get::<&comp::Harvestable>(e) { out.push(Harvestable { hp: hv.hp, max_hp: hv.max_hp, yield_item: hv.yield_item, yield_hp_step: hv.yield_hp_step }); }
     if let Ok(p) = world.get::<&CompPile>(e) { out.push(Pile { slots: p.slots.iter().map(|s| (s.item, s.count)).collect() }); }
+    if let Ok(d) = world.get::<&comp::Door>(e) { out.push(Door { open: d.open }); }
+    if let Ok(ls) = world.get::<&comp::LightSource>(e) { out.push(LightSource { radius: ls.radius, brightness: ls.brightness }); }
+    if let Ok(b) = world.get::<&comp::Building>(e) { out.push(Building { recipe_index: b.recipe_index, progress: b.progress, total: b.total }); }
+    if let Ok(wip) = world.get::<&comp::CraftWip>(e) { out.push(CraftWip { recipe_index: wip.recipe_index, progress: wip.progress }); }
+    if let Ok(tt) = world.get::<&comp::TraitTag>(e) { out.push(TraitTag(tt.0.clone())); }
+    if let Ok(en) = world.get::<&comp::Enemy>(e) { out.push(Enemy { kind: en.kind }); }
+    if let Ok(c) = world.get::<&comp::Clothing>(e) { out.push(Clothing { item: c.item, warmth: c.warmth }); }
+    if world.get::<&comp::Farmland>(e).is_ok() { out.push(Farmland); }
+    if let Ok(c) = world.get::<&comp::Crop>(e) { out.push(Crop { stage: c.stage, growth: c.growth }); }
+
+    // ── 标记组件（无字段，新增时同步更新 snapshot_macro.rs 和 ComponentSnapshot 枚举） ──
+    if world.get::<&comp::Player>(e).is_ok() { out.push(Player); }
+    if world.get::<&comp::Colonist>(e).is_ok() { out.push(Colonist); }
+    if world.get::<&comp::Hostile>(e).is_ok() { out.push(Hostile); }
+    if world.get::<&comp::Dead>(e).is_ok() { out.push(Dead); }
+    if world.get::<&comp::Fleeing>(e).is_ok() { out.push(Fleeing); }
     if world.get::<&comp::Tree>(e).is_ok() { out.push(Tree); }
     if world.get::<&comp::Boulder>(e).is_ok() { out.push(Boulder); }
-    if let Ok(b) = world.get::<&comp::Bush>(e) { out.push(Bush { state: b.state, growth_timer: b.growth_timer, yield_item: b.yield_item }); }
-    if let Ok(st) = world.get::<&comp::StickTrap>(e) { out.push(StickTrap { builder_uid: uid_map.get(&st.builder).copied().unwrap_or(0) }); }
-    if let Ok(d) = world.get::<&comp::Door>(e) { out.push(Door { open: d.open }); }
     if world.get::<&comp::Wall>(e).is_ok() { out.push(Wall); }
     if world.get::<&comp::WoodWall>(e).is_ok() { out.push(WoodWall); }
     if world.get::<&comp::StoneWall>(e).is_ok() { out.push(StoneWall); }
@@ -146,29 +153,26 @@ fn collect_components(world: &World, uid: u64, uid_map: &HashMap<Entity, u64>, o
     if world.get::<&comp::DirtRoad>(e).is_ok() { out.push(DirtRoad); }
     if world.get::<&comp::StoneRoad>(e).is_ok() { out.push(StoneRoad); }
     if world.get::<&comp::Campfire>(e).is_ok() { out.push(Campfire); }
-    if let Ok(ls) = world.get::<&comp::LightSource>(e) { out.push(LightSource { radius: ls.radius, brightness: ls.brightness }); }
     if world.get::<&comp::WolfDen>(e).is_ok() { out.push(WolfDen); }
     if world.get::<&comp::LeanTo>(e).is_ok() { out.push(LeanTo); }
     if world.get::<&comp::PitShelter>(e).is_ok() { out.push(PitShelter); }
     if world.get::<&comp::SmokingRack>(e).is_ok() { out.push(SmokingRack); }
     if world.get::<&comp::Puddle>(e).is_ok() { out.push(Puddle); }
-    if let Ok(b) = world.get::<&comp::Building>(e) { out.push(Building { recipe_index: b.recipe_index, progress: b.progress, total: b.total }); }
-    if let Ok(wip) = world.get::<&comp::CraftWip>(e) { out.push(CraftWip { recipe_index: wip.recipe_index, progress: wip.progress }); }
+
+    // ── 特殊组件（自定义映射逻辑） ──
+    if let Ok(b) = world.get::<&comp::Bush>(e) { out.push(Bush { state: b.state, growth_timer: b.growth_timer, yield_item: b.yield_item }); }
+    if let Ok(st) = world.get::<&comp::StickTrap>(e) { out.push(StickTrap { builder_uid: uid_map.get(&st.builder).copied().unwrap_or(0) }); }
     if let Ok(effs) = world.get::<&Vec<CompStatusEffect>>(e) { for eff in effs.iter() { out.push(StatusEffect { kind: eff.kind, remaining: eff.remaining }); } }
-    if let Ok(tt) = world.get::<&comp::TraitTag>(e) { out.push(TraitTag(tt.0.clone())); }
 }
 
 fn apply_components(world: &mut World, e: Entity, snap: &EntitySnapshot, uid_map: &HashMap<u64, Entity>) {
     use ComponentSnapshot::*;
     for c in snap.components.clone() {
         match c {
+            // ── 值组件（字段结构不同，逐个手写） ──
             Position { x, y } => { let _ = world.insert_one(e, comp::Position { x, y }); }
             Name(s) => { let _ = world.insert_one(e, comp::Name(s)); }
-            Player => { let _ = world.insert_one(e, comp::Player); }
-            Colonist => { let _ = world.insert_one(e, comp::Colonist); }
             Captive { will } => { let _ = world.insert_one(e, comp::Captive { will }); }
-            Hostile => { let _ = world.insert_one(e, comp::Hostile); }
-            Dead => { let _ = world.insert_one(e, comp::Dead); }
             Health { hp, max_hp } => { let _ = world.insert_one(e, comp::Health { hp, max_hp }); }
             Hunger { value } => { let _ = world.insert_one(e, comp::Hunger { value }); }
             Thirst { value } => { let _ = world.insert_one(e, comp::Thirst { value }); }
@@ -177,16 +181,28 @@ fn apply_components(world: &mut World, e: Entity, snap: &EntitySnapshot, uid_map
             BodyTemp { value } => { let _ = world.insert_one(e, comp::BodyTemp { value }); }
             Wet { value } => { let _ = world.insert_one(e, comp::Wet { value }); }
             MoveCooldown { ticks } => { let _ = world.insert_one(e, comp::MoveCooldown { ticks }); }
-            Fleeing => { let _ = world.insert_one(e, comp::Fleeing); }
             AiState { current } => { let _ = world.insert_one(e, comp::AiState { current }); }
             Hands { left, right } => { let _ = world.insert_one(e, comp::Hands { left, right }); }
             Harvestable { hp, max_hp, yield_item, yield_hp_step } => { let _ = world.insert_one(e, comp::Harvestable { hp, max_hp, yield_item, yield_hp_step }); }
             Pile { slots } => { let mut p = CompPile::default(); for (item, count) in slots { p.add(item, count); } let _ = world.insert_one(e, p); }
+            Door { open } => { let _ = world.insert_one(e, comp::Door { open }); }
+            LightSource { radius, brightness } => { let _ = world.insert_one(e, comp::LightSource { radius, brightness }); }
+            Building { recipe_index, progress, total } => { let _ = world.insert_one(e, comp::Building { recipe_index, progress, total }); }
+            CraftWip { recipe_index, progress } => { let _ = world.insert_one(e, comp::CraftWip { recipe_index, progress }); }
+            TraitTag(s) => { let _ = world.insert_one(e, comp::TraitTag(s)); }
+            Enemy { kind } => { let _ = world.insert_one(e, comp::Enemy { kind }); }
+            Clothing { item, warmth } => { let _ = world.insert_one(e, comp::Clothing { item, warmth }); }
+            Farmland => { let _ = world.insert_one(e, comp::Farmland); }
+            Crop { stage, growth } => { let _ = world.insert_one(e, comp::Crop { stage, growth }); }
+
+            // ── 标记组件（无字段，新增时同步更新 snapshot_macro.rs 和 ComponentSnapshot 枚举） ──
+            Player => { let _ = world.insert_one(e, comp::Player); }
+            Colonist => { let _ = world.insert_one(e, comp::Colonist); }
+            Hostile => { let _ = world.insert_one(e, comp::Hostile); }
+            Dead => { let _ = world.insert_one(e, comp::Dead); }
+            Fleeing => { let _ = world.insert_one(e, comp::Fleeing); }
             Tree => { let _ = world.insert_one(e, comp::Tree); }
             Boulder => { let _ = world.insert_one(e, comp::Boulder); }
-            Bush { state, growth_timer, yield_item } => { let _ = world.insert_one(e, comp::Bush { state, growth_timer, yield_item }); }
-            StickTrap { builder_uid } => { let builder = uid_map.get(&builder_uid).copied().unwrap_or(e); let _ = world.insert_one(e, comp::StickTrap { builder }); }
-            Door { open } => { let _ = world.insert_one(e, comp::Door { open }); }
             Wall => { let _ = world.insert_one(e, comp::Wall); }
             WoodWall => { let _ = world.insert_one(e, comp::WoodWall); }
             StoneWall => { let _ = world.insert_one(e, comp::StoneWall); }
@@ -197,14 +213,15 @@ fn apply_components(world: &mut World, e: Entity, snap: &EntitySnapshot, uid_map
             DirtRoad => { let _ = world.insert_one(e, comp::DirtRoad); }
             StoneRoad => { let _ = world.insert_one(e, comp::StoneRoad); }
             Campfire => { let _ = world.insert_one(e, comp::Campfire); }
-            LightSource { radius, brightness } => { let _ = world.insert_one(e, comp::LightSource { radius, brightness }); }
             WolfDen => { let _ = world.insert_one(e, comp::WolfDen); }
             LeanTo => { let _ = world.insert_one(e, comp::LeanTo); }
             PitShelter => { let _ = world.insert_one(e, comp::PitShelter); }
             SmokingRack => { let _ = world.insert_one(e, comp::SmokingRack); }
             Puddle => { let _ = world.insert_one(e, comp::Puddle); }
-            Building { recipe_index, progress, total } => { let _ = world.insert_one(e, comp::Building { recipe_index, progress, total }); }
-            CraftWip { recipe_index, progress } => { let _ = world.insert_one(e, comp::CraftWip { recipe_index, progress }); }
+
+            // ── 特殊组件（自定义映射逻辑） ──
+            Bush { state, growth_timer, yield_item } => { let _ = world.insert_one(e, comp::Bush { state, growth_timer, yield_item }); }
+            StickTrap { builder_uid } => { let builder = uid_map.get(&builder_uid).copied().unwrap_or(e); let _ = world.insert_one(e, comp::StickTrap { builder }); }
             StatusEffect { kind, remaining } => {
                 let has_effs = world.get::<&Vec<CompStatusEffect>>(e).is_ok();
                 if has_effs {
@@ -215,7 +232,6 @@ fn apply_components(world: &mut World, e: Entity, snap: &EntitySnapshot, uid_map
                     let _ = world.insert_one(e, vec![CompStatusEffect { kind, remaining }]);
                 }
             }
-            TraitTag(s) => { let _ = world.insert_one(e, comp::TraitTag(s)); }
         }
     }
 }

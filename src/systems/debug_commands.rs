@@ -228,6 +228,7 @@ pub(crate) fn debug_spawn_execute(app: &mut App, idx: usize) {
                 Position { x: tx, y: ty },
                 crate::components::Name("狼".into()),
                 crate::components::Hostile,
+                crate::components::Enemy { kind: crate::components::EnemyKind::Wolf },
                 crate::components::Health {
                     hp: 50.0,
                     max_hp: 50.0,
@@ -240,8 +241,39 @@ pub(crate) fn debug_spawn_execute(app: &mut App, idx: usize) {
         1 => {
             app.world.spawn((
                 Position { x: tx, y: ty },
+                crate::components::Name("熊".into()),
+                crate::components::Hostile,
+                crate::components::Enemy { kind: crate::components::EnemyKind::Bear },
+                crate::components::Health {
+                    hp: 150.0,
+                    max_hp: 150.0,
+                },
+                crate::components::Wet { value: 0.0 },
+                crate::components::MoveCooldown { ticks: 0 },
+            ));
+            app.push_log("（调试）生成一只熊。".into());
+        }
+        2 => {
+            app.world.spawn((
+                Position { x: tx, y: ty },
+                crate::components::Name("蛇".into()),
+                crate::components::Hostile,
+                crate::components::Enemy { kind: crate::components::EnemyKind::Snake },
+                crate::components::Health {
+                    hp: 25.0,
+                    max_hp: 25.0,
+                },
+                crate::components::Wet { value: 0.0 },
+                crate::components::MoveCooldown { ticks: 0 },
+            ));
+            app.push_log("（调试）生成一条蛇。".into());
+        }
+        3 => {
+            app.world.spawn((
+                Position { x: tx, y: ty },
                 crate::components::Name("新殖民者".into()),
                 crate::components::Colonist,
+                crate::components::Hands::default(),
                 crate::components::Health {
                     hp: 100.0,
                     max_hp: 100.0,
@@ -259,7 +291,7 @@ pub(crate) fn debug_spawn_execute(app: &mut App, idx: usize) {
             ));
             app.push_log("（调试）生成一个殖民者。".into());
         }
-        2 => {
+        4 => {
             app.world.spawn((
                 Position { x: tx, y: ty },
                 crate::components::Name("新俘虏".into()),
@@ -399,6 +431,7 @@ pub(crate) fn debug_spawn_terrain_item(app: &mut App, idx: usize) {
         11 => { place_item(app, px, py, ItemKind::SmallFlake, 5); app.push_log("（调试）脚下刷了 5 片石片。".into()); }
         12 => { place_item(app, px, py, ItemKind::LargeFlake, 3); app.push_log("（调试）脚下刷了 3 片大石片。".into()); }
         13 => { place_item(app, px, py, ItemKind::Bone, 3); app.push_log("（调试）脚下刷了 3 根骨头。".into()); }
+        14 => { place_item(app, px, py, ItemKind::Seed, 5); app.push_log("（调试）脚下刷了 5 颗种子。".into()); }
         _ => {}
     }
 }

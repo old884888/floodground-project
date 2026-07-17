@@ -13,6 +13,7 @@ pub fn update_needs(app: &mut App) {
     let starve_hp = 20.0 / tpd;
     let dehydrate_hp = 25.0 / tpd;
     let diarrhea_mood = 10.0 / tpd;
+    let poison_mood = 5.0 / tpd;
 
     let dead: std::collections::HashSet<hecs::Entity> = app
         .world.query::<&Dead>().iter().map(|(e, _)| e).collect();
@@ -28,6 +29,12 @@ pub fn update_needs(app: &mut App) {
     let diarrhea_set: std::collections::HashSet<hecs::Entity> = app
         .world.query::<&Vec<StatusEffect>>().iter()
         .filter(|(_, v)| v.iter().any(|s| s.kind == EffectKind::Diarrhea))
+        .map(|(e, _)| e)
+        .collect();
+
+    let poison_set: std::collections::HashSet<hecs::Entity> = app
+        .world.query::<&Vec<StatusEffect>>().iter()
+        .filter(|(_, v)| v.iter().any(|s| s.kind == EffectKind::Poison))
         .map(|(e, _)| e)
         .collect();
 
@@ -54,8 +61,9 @@ pub fn update_needs(app: &mut App) {
         thirst.value -= thirst_per * thirst_mult;
 
         let wet_val = wet_map.get(&entity).copied().unwrap_or(0.0);
-        let wet_energy_mult = if wet_val > 80.0 { 1.0 } else if wet_val > 50.0 { 0.5 } else { 0.0 };
-        let wet_mood = if wet_val > 80.0 { 15.0 } else if wet_val > 50.0 { 8.0 } else if wet_val > 20.0 { 3.0 } else { 0.0 };
+        let wet = Wet { value: wet_val };
+        let wet_energy_mult = wet.energy_penalty();
+        let wet_mood = wet.mood_penalty();
 
         // ── 温度惩罚 ──
         let temp = temp_map.get(&entity).copied().unwrap_or(60.0);
@@ -78,7 +86,8 @@ pub fn update_needs(app: &mut App) {
         if energy.value < 20.0 { mood.value -= energy_mood; }
 
         let target_debuff = weather_mood + wet_mood
-            + if diarrhea_set.contains(&entity) { diarrhea_mood } else { 0.0 };
+            + if diarrhea_set.contains(&entity) { diarrhea_mood } else { 0.0 }
+            + if poison_set.contains(&entity) { poison_mood } else { 0.0 };
         let prev = app.weather_mood_tracker.get(&entity).copied().unwrap_or(0.0);
         let delta = target_debuff - prev;
         if delta != 0.0 {
@@ -93,6 +102,11 @@ pub fn update_needs(app: &mut App) {
         }
         if temp <= 0.0 && app.tick.is_multiple_of(50) {
             health.hp -= 2.0;
+        }
+
+        // ── 蛇毒扣血：每 80 tick −1 HP ──
+        if poison_set.contains(&entity) && app.tick.is_multiple_of(80) {
+            health.hp -= 1.0;
         }
 
         if hunger.value <= 0.0 {
@@ -117,7 +131,11 @@ pub fn update_needs(app: &mut App) {
     for (e, (pos, temp)) in app.world.query::<(&Position, &mut BodyTemp)>().iter() {
         if dead.contains(&e) { continue; }
         let wet = wet_map.get(&e).copied().unwrap_or(0.0);
-        let env = app.env_temperature(pos.x, pos.y, wet);
+        let mut env = app.env_temperature(pos.x, pos.y, wet);
+        // 衣物保暖：穿皮甲让环境温度感觉更高
+        if let Ok(c) = app.world.get::<&crate::components::Clothing>(e) {
+            env += c.warmth;
+        }
         let diff = env - temp.value;
         temp.value = (temp.value + diff * 0.3).clamp(0.0, 100.0);
     }

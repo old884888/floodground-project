@@ -175,11 +175,27 @@ fn describe_entity(app: &App, e: Entity) -> Option<String> {
             let name = app.world.get::<&Name>(e).map(|n| n.0.clone()).unwrap_or_default();
             format!("{}——一个俘虏，眼神里写满了'你等着'和'算了'。意志这东西就像墙上的裂缝，迟早会扩大的。", name)
         }
-        EntityKind::Hostile => {
-            "一只灰扑扑的狼，眼睛里写满了'饿'和'你是谁'。它不打算跟你讲道理。".into()
+        EntityKind::Hostile(kind) => match kind {
+            crate::components::EnemyKind::Wolf => {
+                "一只灰扑扑的狼，眼睛里写满了'饿'和'你是谁'。它不打算跟你讲道理。".into()
+            }
+            crate::components::EnemyKind::Bear => {
+                "一头棕熊。它没在看你——它只是在判断你是食物还是麻烦。两种答案它都不介意。".into()
+            }
+            crate::components::EnemyKind::Snake => {
+                "一条蛇，盘成一团。它的沉默比嘶嘶声更危险——等你听见声音时，牙已经在肉里了。".into()
+            }
         }
-        EntityKind::HostileFleeing => {
-            "一只夹着尾巴的狼——你赢了，但它会记住你的脸。".into()
+        EntityKind::HostileFleeing(kind) => match kind {
+            crate::components::EnemyKind::Wolf => {
+                "一只夹着尾巴的狼——你赢了，但它会记住你的脸。".into()
+            }
+            crate::components::EnemyKind::Bear => {
+                "一头正在退开的熊——不是怕你，是懒得跟你拼命。这种克制比攻击更吓人。".into()
+            }
+            crate::components::EnemyKind::Snake => {
+                "一条滑走的蛇——它留给你一句嘶嘶声和一个会肿胀的回忆。".into()
+            }
         }
         EntityKind::Door(true) => {
             "门敞开着，像是在说'请进'，也像是在说'懒得关'。嘎吱声是它唯一的语言。".into()
@@ -240,6 +256,21 @@ fn describe_entity(app: &App, e: Entity) -> Option<String> {
         }
         EntityKind::Corpse => {
             "一具尸体——肉还新鲜，但不会永远新鲜。".into()
+        }
+        EntityKind::Farmland(None) => {
+            "一块翻好的土地，黑黝黝的泥巴散发着草根的腥味。等着种子——就像这世界等着你犯下一个错误。".into()
+        }
+        EntityKind::Farmland(Some(crate::components::CropStage::Seed)) => {
+            "种子埋在土里，什么也看不见。你只能信——这跟信这个世界的所有其他东西一样，需要耐心。".into()
+        }
+        EntityKind::Farmland(Some(crate::components::CropStage::Sprout)) => {
+            "嫩绿的小苗顶破了泥土。它比你先活下来了——这是个好兆头，也许。".into()
+        }
+        EntityKind::Farmland(Some(crate::components::CropStage::Growing)) => {
+            "作物长到半人高，叶子在风里拍打。再等一阵就能吃了——前提是你没先饿死。".into()
+        }
+        EntityKind::Farmland(Some(crate::components::CropStage::Ripe)) => {
+            "浆果红透了，沉甸甸地坠在枝头。该收了——再不收，鸟和虫子可不会跟你客气。".into()
         }
         EntityKind::Campfire => {
             "一团不屈的火焰，是这该死的世界里唯一温暖的谎言。烧的是木柴，暖的是希望——虽然两者都不持久。".into()

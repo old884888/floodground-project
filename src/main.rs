@@ -1,18 +1,3 @@
-mod save;
-mod app_types;
-mod app;
-mod components;
-mod data;
-mod desc;
-mod entity_kind;
-mod events;
-mod items;
-mod narrative;
-mod systems;
-mod ui;
-mod village;
-mod world;
-
 use std::io::{self, stdout, Write};
 use std::time::{Duration, Instant};
 
@@ -25,9 +10,11 @@ use rand::thread_rng;
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 
-use app::App;
-use data::{init_item_registry, init_terrain_registry, load_actors, load_food, load_terrain, DataError};
-use systems::{run_tick, ticks_this_frame};
+use bloodsoil::app::App;
+use bloodsoil::data::{
+    init_item_registry, init_terrain_registry, load_actors, load_food, load_terrain, DataError,
+};
+use bloodsoil::systems::{run_tick, ticks_this_frame};
 
 fn main() -> io::Result<()> {
     // 任何初始化错误都走 install_panic_hook 之前：直接打到 stderr，正常退出
@@ -107,7 +94,6 @@ fn install_panic_hook() {
     use std::panic;
     let prev = panic::take_hook();
     panic::set_hook(Box::new(move |info| {
-        // 强制恢复终端，否则用户屏幕会卡在 raw mode + alternate screen
         let _ = disable_raw_mode();
         let _ = execute!(io::stdout(), LeaveAlternateScreen, DisableMouseCapture);
         prev(info);
@@ -120,52 +106,54 @@ fn run_loop(
     rng: &mut impl rand::Rng,
 ) -> io::Result<()> {
     let tick_interval = Duration::from_millis(100);
-    let frame_min = Duration::from_millis(16); // ~60fps 封顶
+    let frame_min = Duration::from_millis(16);
     let mut last_tick = Instant::now();
 
     loop {
         let frame_start = Instant::now();
-        terminal.draw(|f| ui::draw(f, app))?;
+        terminal.draw(|f| bloodsoil::ui::draw(f, app))?;
 
-        // 一口气清空输入队列，别他妈一个一个啃
         while event::poll(Duration::ZERO)? {
             match event::read()? {
                 Event::Key(key) if key.kind == KeyEventKind::Press => {
-                    systems::input::handle_key(app, key);
+                    bloodsoil::systems::input::handle_key(app, key);
                 }
                 Event::Mouse(_) => {}
                 _ => {}
             }
         }
 
-        // 延迟读档：渲染帧已画了 Loading 画面，这里真读盘
+        // 延迟读档
         if app.pending_load {
-            match crate::save::load_game() {
+            match bloodsoil::save::load_game() {
                 Ok((data, world, uid_map)) => {
                     app.world = world;
                     app.player = uid_map.get(&data.player_uid).copied().unwrap_or(app.player);
                     app.selected = uid_map.get(&data.selected_uid).copied().or(Some(app.player));
-                    app.tick = data.tick; app.day = data.day;
-                    app.weather = data.weather; app.weather_timer = data.weather_timer;
-                    app.reputation = data.reputation; app.next_uid = data.next_uid;
+                    app.tick = data.tick;
+                    app.day = data.day;
+                    app.weather = data.weather;
+                    app.weather_timer = data.weather_timer;
+                    app.reputation = data.reputation;
+                    app.next_uid = data.next_uid;
                     app.map.apply_chunks(data.dirty_chunks);
                     app.rebuild_spatial_index();
-                    app.loading_tick = 30; // 跳到2/3，留0.3s动画收尾
+                    app.loading_tick = 30;
                     app.push_log("已加载存档。".into());
                 }
                 Err(e) => {
-                    app.screen = crate::app::Screen::MainMenu;
+                    app.screen = bloodsoil::app::Screen::MainMenu;
                     app.push_log(format!("读档失败: {}", e));
                 }
             }
             app.pending_load = false;
         }
 
-        // 延迟存档：先转 3 帧动画让用户看到，再真写盘
+        // 延迟存档
         if app.saving {
             app.save_frame += 1;
             if app.save_frame >= 3 {
-                if let Err(e) = crate::save::save_game(app) {
+                if let Err(e) = bloodsoil::save::save_game(app) {
                     app.push_log(format!("存档失败: {}", e));
                 } else {
                     app.push_log("已存档。".into());
@@ -178,16 +166,15 @@ fn run_loop(
             break;
         }
 
-        // ── 加载界面：每帧推进 tick ──
-        if app.screen == app::Screen::Loading {
+        // 加载界面
+        if app.screen == bloodsoil::app::Screen::Loading {
             app.loading_tick = app.loading_tick.saturating_add(1);
-            // 40 ticks @ ~60fps ≈ 0.67 秒后切到游戏
             if app.loading_tick >= 40 {
-                app.screen = app::Screen::Gameplay;
+                app.screen = bloodsoil::app::Screen::Gameplay;
             }
         }
 
-        if app.screen == app::Screen::Gameplay {
+        if app.screen == bloodsoil::app::Screen::Gameplay {
             let time_to_tick = last_tick.elapsed() >= tick_interval || app.force_step;
             if time_to_tick {
                 last_tick = Instant::now();

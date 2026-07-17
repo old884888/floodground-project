@@ -104,7 +104,8 @@ fn update_wet(app: &mut App) {
 
     for (e, delta) in wet_updates {
         if let Ok(mut wet) = app.world.get::<&mut Wet>(e) {
-            wet.value = (wet.value + delta).clamp(0.0, 100.0);
+            wet.value += delta;
+            wet.clamp();
         }
     }
 }

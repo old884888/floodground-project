@@ -244,6 +244,13 @@ fn handle_adventure_key(app: &mut App, key: KeyEvent) {
             app.pending_torture = true;
             app.force_step = true;
         }
+        KeyCode::Char('o') | KeyCode::Char('O') => {
+            crate::systems::interact::try_wear(app);
+            app.force_step = true;
+        }
+        KeyCode::Char('f') | KeyCode::Char('F') => {
+            crate::systems::farming::try_farm(app, &mut rand::thread_rng());
+        }
         KeyCode::Char('g') | KeyCode::Char('G') => {
             app.pending_grab = true;
             app.force_step = true;

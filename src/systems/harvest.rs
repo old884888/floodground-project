@@ -9,6 +9,43 @@ use crate::items::drop_item_near;
 use crate::systems::combat::apply_damage;
 use crate::systems::crafting::actor_has_item;
 
+/// 对 actor 手中正在使用的工具施加磨损。
+/// 右手优先。count 递减，≤0 时工具消失。
+pub fn apply_wear(app: &mut App, entity: hecs::Entity, rng: &mut impl Rng) {
+    let broken_label: Option<String> = {
+        let Ok(mut hands) = app.world.get::<&mut Hands>(entity) else { return };
+        let result: Option<(String, bool)> = (|| {
+            if let Some((kind, cnt)) = hands.right.as_mut() {
+                let def = crate::data::item_def(kind.key());
+                let (lo, hi) = def.wear_per_use?;
+                let dmg = rng.gen_range(lo..=hi) as u32;
+                *cnt = cnt.saturating_sub(dmg);
+                if *cnt == 0 { return Some((kind.label().to_string(), true)); }
+                return None;
+            }
+            if let Some((kind, cnt)) = hands.left.as_mut() {
+                let def = crate::data::item_def(kind.key());
+                let (lo, hi) = def.wear_per_use?;
+                let dmg = rng.gen_range(lo..=hi) as u32;
+                *cnt = cnt.saturating_sub(dmg);
+                if *cnt == 0 { return Some((kind.label().to_string(), false)); }
+            }
+            None
+        })();
+        match result {
+            Some((label, is_right)) => {
+                if is_right { hands.right = None; } else { hands.left = None; }
+                Some(label)
+            }
+            None => None,
+        }
+    }; // hands RefMut dropped here
+
+    if let Some(label) = broken_label {
+        app.push_log(format!("{}坏了！", label));
+    }
+}
+
 pub fn try_chop(app: &mut App, rng: &mut impl Rng) {
     hit_harvestable(app, rng, TargetKind::Tree);
 }
@@ -179,6 +216,9 @@ fn hit_harvestable(app: &mut App, rng: &mut impl Rng, kind: TargetKind) {
         }
     }
 
+    // ── 工具磨损 ──
+    apply_wear(app, actor, rng);
+
     match kind {
         TargetKind::Tree => {
             app.events.push(GameEvent::TreeChopped {
@@ -317,6 +357,11 @@ pub fn try_harvest_bush(app: &mut App, rng: &mut impl Rng) -> bool {
         if extra_remaining > 0 {
             drop_item_near(app, (px, py), (px, py), extra_item, extra_remaining);
         }
+    }
+
+    // ── 浆果灌木 20% 掉种子（种植系统用） ──
+    if yield_item == ItemKind::Berry && rng.gen_bool(0.20) {
+        drop_item_near(app, (px, py), (px, py), ItemKind::Seed, 1);
     }
 
     let item_name = yield_item.label();
